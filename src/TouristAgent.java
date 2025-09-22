@@ -11,34 +11,45 @@ import java.util.*;
 
 public class TouristAgent extends Agent {
     private AID guideAgent;
+    private AID coordinatorAgent; // NOUVEAU
     private String currentLocation = "PointA";
-    private String nationality; // "Français", "Italien", "Anglais", "Allemand"
-    private String[] preferences; // Préférences artistiques
+    private String nationality;
+    private String[] preferences;
     private int age;
     private double satisfaction = 0.5;
     private double fatigue = 0.0;
     private double interest = 0.7;
     private boolean inGroup = false;
+    private boolean waitingForAssignment = false; // NOUVEAU
     private int questionsAsked = 0;
+    private int toursCompleted = 0; // NOUVEAU
     private Map<String, Double> tableauRatings = new HashMap<>();
     
     // Caractéristiques de personnalité
-    private double curiosity; // 0.0 à 1.0
-    private double socialness; // 0.0 à 1.0  
-    private double patience; // 0.0 à 1.0
+    private double curiosity;
+    private double socialness;
+    private double patience;
     private boolean hasQuestions = false;
     
+    // Temps limite pour attendre une assignation
+    private final long MAX_WAIT_TIME = 60000; // 1 minute
+    private long waitStartTime = 0;
+    
     protected void setup() {
-        System.out.println("Agent Touriste " + getLocalName() + " démarré");
+        System.out.println("Agent Touriste " + getLocalName() + " démarré avec support coordinateur");
         
         // Initialisation aléatoire du profil
         initializeProfile();
         
         // Comportements
-        addBehaviour(new GuideFinder());
+        addBehaviour(new CoordinatorRegistration());
         addBehaviour(new GuideInteractionHandler());
         addBehaviour(new PersonalityBehaviour());
         addBehaviour(new SatisfactionMonitor());
+        addBehaviour(new WaitingTimeoutHandler()); // NOUVEAU
+        
+        // Recherche et enregistrement auprès du coordinateur
+        findAndRegisterWithCoordinator();
     }
     
     private void initializeProfile() {
@@ -48,19 +59,19 @@ public class TouristAgent extends Agent {
         nationality = nationalities[rand.nextInt(nationalities.length)];
         
         String[] artPrefs = {"Renaissance", "Moderne", "Impressionniste", "Contemporain", "Classique"};
-        preferences = new String[2 + rand.nextInt(2)]; // 2 à 3 préférences
+        preferences = new String[2 + rand.nextInt(2)];
         for (int i = 0; i < preferences.length; i++) {
             preferences[i] = artPrefs[rand.nextInt(artPrefs.length)];
         }
         
-        age = 18 + rand.nextInt(60); // 18 à 77 ans
+        age = 18 + rand.nextInt(60);
         
         // Personnalité basée sur l'âge et la nationalité
         curiosity = 0.3 + rand.nextDouble() * 0.7;
         socialness = 0.2 + rand.nextDouble() * 0.8;
         patience = (age > 50) ? 0.6 + rand.nextDouble() * 0.4 : 0.3 + rand.nextDouble() * 0.7;
         
-        // Ajustements culturels simplifiés
+        // Ajustements culturels
         if ("Japonais".equals(nationality)) {
             patience += 0.2;
             socialness -= 0.1;
@@ -76,44 +87,128 @@ public class TouristAgent extends Agent {
                          ", âge: " + age + ", curiosité: " + String.format("%.2f", curiosity));
     }
     
-    // Recherche et inscription auprès d'un guide
-    private class GuideFinder extends OneShotBehaviour {
-        public void action() {
-            // Attendre un peu avant de chercher (simulation arrivée échelonnée)
-            try {
-                Thread.sleep(new Random().nextInt(3000) + 1000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            
-            // Rechercher les guides disponibles
-            DFAgentDescription template = new DFAgentDescription();
-            ServiceDescription sd = new ServiceDescription();
-            sd.setType("guide-service");
-            template.addServices(sd);
-            
-            try {
-                DFAgentDescription[] result = DFService.search(myAgent, template);
-                if (result.length > 0) {
-                    // Choisir un guide (ici le premier disponible)
-                    guideAgent = result[0].getName();
-                    
-                    // Demander à rejoindre le groupe
-                    ACLMessage msg = new ACLMessage(ACLMessage.REQUEST);
-                    msg.addReceiver(guideAgent);
-                    msg.setContent("JOIN_GROUP");
-                    send(msg);
-                    
-                    System.out.println("Touriste " + getLocalName() + " demande à rejoindre le guide " +
-                                     guideAgent.getLocalName());
+    // NOUVEAU : Recherche et enregistrement auprès du coordinateur
+    private void findAndRegisterWithCoordinator() {
+        addBehaviour(new OneShotBehaviour() {
+            public void action() {
+                // Attendre un peu avant de chercher (simulation arrivée échelonnée)
+                try {
+                    Thread.sleep(new Random().nextInt(3000) + 1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
-            } catch (FIPAException fe) {
-                fe.printStackTrace();
+                
+                // Rechercher le coordinateur
+                DFAgentDescription template = new DFAgentDescription();
+                ServiceDescription sd = new ServiceDescription();
+                sd.setType("coordinator-service");
+                template.addServices(sd);
+                
+                try {
+                    DFAgentDescription[] result = DFService.search(myAgent, template);
+                    if (result.length > 0) {
+                        coordinatorAgent = result[0].getName();
+                        System.out.println("Touriste " + getLocalName() + " trouvé coordinateur: " + coordinatorAgent.getLocalName());
+                        
+                        // S'enregistrer auprès du coordinateur
+                        registerWithCoordinator();
+                    } else {
+                        // Fallback : chercher directement un guide (ancien système)
+                        findGuideDirectly();
+                    }
+                } catch (FIPAException fe) {
+                    fe.printStackTrace();
+                    findGuideDirectly();
+                }
+            }
+        });
+    }
+    
+    // NOUVEAU : Enregistrement auprès du coordinateur
+    private void registerWithCoordinator() {
+        ACLMessage msg = new ACLMessage(ACLMessage.SUBSCRIBE);
+        msg.addReceiver(coordinatorAgent);
+        msg.setContent("REGISTER_TOURIST");
+        send(msg);
+        
+        waitingForAssignment = true;
+        waitStartTime = System.currentTimeMillis();
+        
+        System.out.println("Touriste " + getLocalName() + " s'enregistre auprès du coordinateur et attend une assignation");
+    }
+    
+    // Fallback : recherche directe d'un guide (ancien système)
+    private void findGuideDirectly() {
+        DFAgentDescription template = new DFAgentDescription();
+        ServiceDescription sd = new ServiceDescription();
+        sd.setType("guide-service");
+        template.addServices(sd);
+        
+        try {
+            DFAgentDescription[] result = DFService.search(this, template);
+            if (result.length > 0) {
+                guideAgent = result[0].getName();
+                
+                ACLMessage msg = new ACLMessage(ACLMessage.REQUEST);
+                msg.addReceiver(guideAgent);
+                msg.setContent("JOIN_GROUP");
+                send(msg);
+                
+                System.out.println("Touriste " + getLocalName() + " demande directement à rejoindre le guide " +
+                                 guideAgent.getLocalName());
+            }
+        } catch (FIPAException fe) {
+            fe.printStackTrace();
+        }
+    }
+    
+    // NOUVEAU : Enregistrement auprès du coordinateur (behaviour)
+    private class CoordinatorRegistration extends CyclicBehaviour {
+        public void action() {
+            MessageTemplate mt = MessageTemplate.or(
+                MessageTemplate.MatchPerformative(ACLMessage.CONFIRM),
+                MessageTemplate.MatchPerformative(ACLMessage.INFORM)
+            );
+            ACLMessage msg = receive(mt);
+            
+            if (msg != null) {
+                String content = msg.getContent();
+                if ("WELCOME_MUSEUM".equals(content)) {
+                    handleMuseumWelcome();
+                } else if (content.startsWith("ASSIGNED_TO_GUIDE:")) {
+                    handleGuideAssignment(content);
+                } else {
+                    // Remettre le message s'il ne nous concerne pas
+                    putBack(msg);
+                }
+            } else {
+                block();
             }
         }
     }
     
-    // Gestion des interactions avec le guide
+    // NOUVEAU : Gestionnaire de timeout d'attente
+    private class WaitingTimeoutHandler extends TickerBehaviour {
+        public WaitingTimeoutHandler() {
+            super(TouristAgent.this, 15000); // Vérifier toutes les 15 secondes
+        }
+        
+        protected void onTick() {
+            if (waitingForAssignment) {
+                long waitTime = System.currentTimeMillis() - waitStartTime;
+                
+                if (waitTime > MAX_WAIT_TIME) {
+                    System.out.println("Touriste " + getLocalName() + " : Temps d'attente dépassé, tentative de connexion directe");
+                    waitingForAssignment = false;
+                    findGuideDirectly();
+                } else if (waitTime > MAX_WAIT_TIME / 2) {
+                    System.out.println("Touriste " + getLocalName() + " attend depuis " + (waitTime / 1000) + " secondes...");
+                }
+            }
+        }
+    }
+    
+    // Gestion des interactions avec le guide (améliorée)
     private class GuideInteractionHandler extends CyclicBehaviour {
         public void action() {
             ACLMessage msg = receive();
@@ -133,6 +228,8 @@ public class TouristAgent extends Agent {
                     handleTourEnd(content);
                 } else if (content.startsWith("ANSWER:")) {
                     handleAnswer(content);
+                } else if ("REDIRECT_TO_COORDINATOR".equals(content)) {
+                    handleRedirectToCoordinator();
                 }
             } else {
                 block();
@@ -140,49 +237,79 @@ public class TouristAgent extends Agent {
         }
     }
     
-    // Comportement de personnalité
+    // Comportement de personnalité (identique)
     private class PersonalityBehaviour extends TickerBehaviour {
         public PersonalityBehaviour() {
-            super(TouristAgent.this, 8000 + new Random().nextInt(4000)); // 8-12 secondes
+            super(TouristAgent.this, 8000 + new Random().nextInt(4000));
         }
         
         protected void onTick() {
             if (inGroup) {
-                // Comportements basés sur la personnalité
                 Random rand = new Random();
                 
-                // Les curieux posent plus de questions
                 if (curiosity > 0.6 && rand.nextDouble() < 0.3) {
                     askQuestion();
                 }
                 
-                // Les sociaux interagissent plus
                 if (socialness > 0.7 && rand.nextDouble() < 0.2) {
                     expressOpinion();
                 }
                 
-                // Mise à jour de l'état personnel
                 updatePersonalState();
                 sendStatusToGuide();
             }
         }
     }
     
-    // Surveillance de la satisfaction
+    // Surveillance de la satisfaction (identique)
     private class SatisfactionMonitor extends TickerBehaviour {
         public SatisfactionMonitor() {
-            super(TouristAgent.this, 15000); // Toutes les 15 secondes
+            super(TouristAgent.this, 15000);
         }
         
         protected void onTick() {
             if (inGroup) {
                 evaluateExperience();
                 
-                // Si très insatisfait, possibilité de quitter
                 if (satisfaction < 0.2 && new Random().nextDouble() < 0.1) {
                     considerLeaving();
                 }
             }
+        }
+    }
+    
+    // NOUVEAU : Gestion de l'accueil du musée
+    private void handleMuseumWelcome() {
+        System.out.println("Touriste " + getLocalName() + " : Bienvenue au musée reçue du coordinateur");
+    }
+    
+    // NOUVEAU : Gestion de l'assignation à un guide
+    private void handleGuideAssignment(String content) {
+        String[] parts = content.split(":");
+        if (parts.length >= 2) {
+            String guideName = parts[1];
+            guideAgent = new AID(guideName, AID.ISLOCALNAME);
+            waitingForAssignment = false;
+            
+            System.out.println("Touriste " + getLocalName() + " assigné au guide " + guideName + " par le coordinateur");
+            
+            // Envoyer un message de confirmation au guide
+            ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+            msg.addReceiver(guideAgent);
+            msg.setContent("TOURIST_READY:" + getLocalName());
+            send(msg);
+        }
+    }
+    
+    // NOUVEAU : Gestion de la redirection vers le coordinateur
+    private void handleRedirectToCoordinator() {
+        System.out.println("Touriste " + getLocalName() + " : Redirigé vers le coordinateur");
+        
+        if (coordinatorAgent != null) {
+            registerWithCoordinator();
+        } else {
+            // Chercher le coordinateur
+            findAndRegisterWithCoordinator();
         }
     }
     
@@ -192,6 +319,7 @@ public class TouristAgent extends Agent {
             String guideSpecialization = parts[1];
             currentLocation = parts[2];
             inGroup = true;
+            waitingForAssignment = false;
             
             // Évaluer la compatibilité avec la spécialisation du guide
             boolean compatibleSpecialization = false;
@@ -213,16 +341,14 @@ public class TouristAgent extends Agent {
     }
     
     private void handleMovement(String content) {
-        String destination = content.substring(8); // Enlever "MOVE_TO:"
+        String destination = content.substring(8);
         currentLocation = destination;
         
-        // Simulation du déplacement et impact sur la fatigue
         fatigue += 0.05;
-        if (age > 60) fatigue += 0.05; // Les plus âgés se fatiguent plus
+        if (age > 60) fatigue += 0.05;
         
         System.out.println("Touriste " + getLocalName() + " se déplace vers " + destination);
         
-        // Signaler qu'on est prêt après le déplacement
         addBehaviour(new WakerBehaviour(this, 2000 + new Random().nextInt(2000)) {
             protected void onWake() {
                 ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
@@ -234,22 +360,17 @@ public class TouristAgent extends Agent {
     }
     
     private void handleExplanation(String content) {
-        String explanation = content.substring(12); // Enlever "EXPLANATION:"
+        String explanation = content.substring(12);
         
-        // Évaluer l'explication selon les préférences
         double explanationRating = evaluateExplanation(explanation);
         tableauRatings.put(currentLocation, explanationRating);
         
-        // Impact sur la satisfaction
         satisfaction = (satisfaction + explanationRating) / 2.0;
-        
-        // Impact sur l'intérêt
         interest = Math.max(0.0, Math.min(1.0, interest + (explanationRating - 0.5) * 0.3));
         
         System.out.println("Touriste " + getLocalName() + " écoute l'explication (" +
                          currentLocation + ") - Note: " + String.format("%.2f", explanationRating));
         
-        // Possibilité de poser une question si très intéressé
         if (explanationRating > 0.8 && curiosity > 0.5 && new Random().nextDouble() < 0.4) {
             addBehaviour(new WakerBehaviour(this, 3000 + new Random().nextInt(2000)) {
                 protected void onWake() {
@@ -262,7 +383,6 @@ public class TouristAgent extends Agent {
     private void handleBreakProposal(String content) {
         int breakDuration = Integer.parseInt(content.split(":")[1]);
         
-        // Décision basée sur la fatigue et la patience
         boolean acceptBreak = fatigue > 0.4 || (patience < 0.5 && new Random().nextDouble() < 0.7);
         
         ACLMessage reply = new ACLMessage(acceptBreak ? ACLMessage.ACCEPT_PROPOSAL : ACLMessage.REJECT_PROPOSAL);
@@ -271,36 +391,125 @@ public class TouristAgent extends Agent {
         send(reply);
         
         if (acceptBreak) {
-            fatigue = Math.max(0.0, fatigue - 0.3); // Se reposer
+            fatigue = Math.max(0.0, fatigue - 0.3);
             System.out.println("Touriste " + getLocalName() + " accepte la pause");
         }
     }
     
+    // NOUVEAU : Gestion améliorée de la fin de visite
     private void handleTourEnd(String content) {
-        String finalMessage = content.substring(9); // Enlever "TOUR_END:"
+        String finalMessage = content.substring(9);
         
-        // Évaluation finale
         double finalSatisfaction = calculateFinalSatisfaction();
+        toursCompleted++;
         
-        System.out.println("Touriste " + getLocalName() + " termine la visite - Satisfaction finale: " +
-                         String.format("%.2f", finalSatisfaction) + "/1.0");
+        System.out.println("Touriste " + getLocalName() + " termine la visite #" + toursCompleted + 
+                         " - Satisfaction finale: " + String.format("%.2f", finalSatisfaction) + "/1.0");
         
         inGroup = false;
-        // Le touriste pourrait chercher un autre guide ou quitter le musée
+        guideAgent = null;
+        
+        // Décision : rester pour une autre visite ou quitter
+        addBehaviour(new WakerBehaviour(this, 5000 + new Random().nextInt(5000)) {
+            protected void onWake() {
+                decideNextAction(finalSatisfaction);
+            }
+        });
     }
     
     private void handleAnswer(String content) {
-        String answer = content.substring(7); // Enlever "ANSWER:"
+        String answer = content.substring(7);
         
-        // La réponse augmente la satisfaction
         satisfaction += 0.1;
-        curiosity = Math.max(0.0, curiosity - 0.05); // Curiosité temporairement satisfaite
+        curiosity = Math.max(0.0, curiosity - 0.05);
         
         System.out.println("Touriste " + getLocalName() + " reçoit une réponse: " + answer);
     }
     
+    // NOUVEAU : Décision après la fin d'une visite
+    private void decideNextAction(double lastSatisfaction) {
+        Random rand = new Random();
+        
+        // Facteurs de décision
+        boolean stayForAnother = false;
+        
+        if (lastSatisfaction > 0.8 && toursCompleted < 3) {
+            stayForAnother = rand.nextDouble() < 0.7; // 70% de chance de rester
+        } else if (lastSatisfaction > 0.6 && toursCompleted < 2) {
+            stayForAnother = rand.nextDouble() < 0.4; // 40% de chance
+        } else if (lastSatisfaction > 0.3 && toursCompleted == 0) {
+            stayForAnother = rand.nextDouble() < 0.2; // 20% de chance
+        }
+        
+        if (stayForAnother && coordinatorAgent != null) {
+            // Réinitialiser l'état pour une nouvelle visite
+            resetForNewTour();
+            
+            System.out.println("Touriste " + getLocalName() + " décide de faire une autre visite");
+            registerWithCoordinator();
+        } else {
+            // Quitter le musée
+            leaveMuseum();
+        }
+    }
+    
+    // NOUVEAU : Réinitialisation pour une nouvelle visite
+    private void resetForNewTour() {
+        currentLocation = "PointA";
+        satisfaction = 0.5;
+        fatigue = Math.max(0.0, fatigue - 0.2); // Récupération partielle
+        interest = 0.7;
+        questionsAsked = 0;
+        tableauRatings.clear();
+        
+        // La personnalité évolue légèrement
+        curiosity = Math.min(1.0, curiosity + 0.1);
+        patience = Math.max(0.0, patience - 0.05); // Un peu moins patient
+    }
+    
+    // NOUVEAU : Quitter le musée
+    private void leaveMuseum() {
+        System.out.println("Touriste " + getLocalName() + " (" + nationality + ") quitte le musée après " + 
+                         toursCompleted + " visite(s) - Expérience globale: " + 
+                         String.format("%.2f", calculateOverallExperience()));
+        
+        // Signaler le départ au coordinateur
+        if (coordinatorAgent != null) {
+            ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+            msg.addReceiver(coordinatorAgent);
+            msg.setContent("TOURIST_LEAVING:" + toursCompleted + ":" + calculateOverallExperience());
+            send(msg);
+        }
+        
+        // Programmer l'arrêt de l'agent
+        addBehaviour(new WakerBehaviour(this, 2000) {
+            protected void onWake() {
+                doDelete();
+            }
+        });
+    }
+    
+    // NOUVEAU : Calcul de l'expérience globale
+    private double calculateOverallExperience() {
+        if (tableauRatings.isEmpty()) return satisfaction;
+        
+        double totalRating = tableauRatings.values().stream().mapToDouble(Double::doubleValue).sum();
+        double avgTableauRating = totalRating / tableauRatings.size();
+        
+        // Combinaison de facteurs
+        double overallExp = (satisfaction * 0.4) + (avgTableauRating * 0.4) + ((1.0 - fatigue) * 0.2);
+        
+        // Bonus pour les visites multiples réussies
+        if (toursCompleted > 1) {
+            overallExp += 0.1 * (toursCompleted - 1);
+        }
+        
+        return Math.max(0.0, Math.min(1.0, overallExp));
+    }
+    
+    // Méthodes existantes (identiques)
     private void askQuestion() {
-        if (questionsAsked < 3) { // Limite le nombre de questions
+        if (questionsAsked < 3) {
             String[] questions = {
                 "Quelle technique a été utilisée pour cette œuvre ?",
                 "Quelle est l'histoire derrière ce tableau ?",
@@ -337,30 +546,25 @@ public class TouristAgent extends Agent {
     private void updatePersonalState() {
         Random rand = new Random();
         
-        // Évolution naturelle de la fatigue
         fatigue = Math.min(1.0, fatigue + 0.02);
         
-        // Variation de l'intérêt selon la personnalité
         double interestChange = (curiosity - 0.5) * 0.05 + (rand.nextDouble() - 0.5) * 0.1;
         interest = Math.max(0.0, Math.min(1.0, interest + interestChange));
         
-        // L'âge influence la fatigue
         if (age > 65) {
             fatigue += 0.01;
         } else if (age < 25) {
-            fatigue = Math.max(0.0, fatigue - 0.005); // Les jeunes récupèrent mieux
+            fatigue = Math.max(0.0, fatigue - 0.005);
         }
     }
     
     private void sendStatusToGuide() {
         if (guideAgent != null) {
-            // Envoyer la satisfaction
             ACLMessage msg1 = new ACLMessage(ACLMessage.INFORM);
             msg1.addReceiver(guideAgent);
             msg1.setContent("STATUS:SATISFACTION:" + satisfaction);
             send(msg1);
             
-            // Envoyer la fatigue
             ACLMessage msg2 = new ACLMessage(ACLMessage.INFORM);
             msg2.addReceiver(guideAgent);
             msg2.setContent("STATUS:FATIGUE:" + fatigue);
@@ -369,73 +573,57 @@ public class TouristAgent extends Agent {
     }
     
     private double evaluateExplanation(String explanation) {
-        double rating = 0.5; // Note de base
+        double rating = 0.5;
         
-        // Bonus si l'explication mentionne nos préférences
         for (String pref : preferences) {
             if (explanation.toLowerCase().contains(pref.toLowerCase())) {
                 rating += 0.2;
             }
         }
         
-        // Bonus si explication détaillée (approximation par la longueur)
         if (explanation.length() > 100) {
             rating += 0.1;
         }
         
-        // Malus si pas assez patient pour les longues explications
         if (explanation.length() > 150 && patience < 0.4) {
             rating -= 0.2;
         }
         
-        // Variation selon la curiosité
         rating += (curiosity - 0.5) * 0.3;
         
-        // Normaliser
         return Math.max(0.0, Math.min(1.0, rating));
     }
     
     private void evaluateExperience() {
-        // Évaluation globale basée sur plusieurs facteurs
         double experienceRating = 0.0;
         
-        // Moyenne des notes des tableaux vus
         if (!tableauRatings.isEmpty()) {
             double sum = tableauRatings.values().stream().mapToDouble(Double::doubleValue).sum();
             experienceRating = sum / tableauRatings.size();
         }
         
-        // Ajustement selon l'état personnel
-        experienceRating -= fatigue * 0.3; // La fatigue diminue l'appréciation
-        experienceRating += interest * 0.2; // L'intérêt améliore l'expérience
+        experienceRating -= fatigue * 0.3;
+        experienceRating += interest * 0.2;
         
-        // Mise à jour progressive de la satisfaction
         satisfaction = (satisfaction * 0.7) + (experienceRating * 0.3);
         satisfaction = Math.max(0.0, Math.min(1.0, satisfaction));
     }
     
     private void considerLeaving() {
-        // Un touriste très insatisfait peut envisager de quitter
         System.out.println("Touriste " + getLocalName() + " considère quitter le groupe (satisfaction très faible)");
-        
-        // Pour l'instant, on ne fait que signaler - dans une version plus avancée,
-        // on pourrait implémenter la sortie du groupe
     }
     
     private double calculateFinalSatisfaction() {
         double finalScore = satisfaction;
         
-        // Bonus si beaucoup de questions ont été posées et répondues
         if (questionsAsked >= 2) {
             finalScore += 0.1;
         }
         
-        // Malus si trop fatigué à la fin
         if (fatigue > 0.8) {
             finalScore -= 0.2;
         }
         
-        // Bonus selon la compatibilité des préférences
         long compatibleTableaux = tableauRatings.values().stream()
             .mapToLong(rating -> rating > 0.7 ? 1 : 0)
             .sum();
@@ -456,14 +644,18 @@ public class TouristAgent extends Agent {
     public double getFatigue() { return fatigue; }
     public double getInterest() { return interest; }
     public boolean isInGroup() { return inGroup; }
+    public boolean isWaitingForAssignment() { return waitingForAssignment; }
     public AID getGuideAgent() { return guideAgent; }
+    public AID getCoordinatorAgent() { return coordinatorAgent; }
     public double getCuriosity() { return curiosity; }
     public double getSocialness() { return socialness; }
     public double getPatience() { return patience; }
     public int getQuestionsAsked() { return questionsAsked; }
+    public int getToursCompleted() { return toursCompleted; }
     public Map<String, Double> getTableauRatings() { return new HashMap<>(tableauRatings); }
     
     protected void takeDown() {
-        System.out.println("Agent Touriste " + getLocalName() + " (" + nationality + ") terminé");
+        System.out.println("Agent Touriste " + getLocalName() + " (" + nationality + ") terminé après " + 
+                         toursCompleted + " visite(s)");
     }
 }

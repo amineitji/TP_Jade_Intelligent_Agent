@@ -1,392 +1,258 @@
-# Système de Gestion de Visites Guidées d'Exposition - JADE
+# Système Multi-Agents Guide Touristique Intelligent
 
-## 📖 Description
+## Description du Projet
 
-Ce projet implémente un système multi-agents utilisant la plateforme JADE pour gérer des visites guidées dans une exposition d'art. Le système coordonne automatiquement l'attribution de guides à des groupes de touristes pour leur faire découvrir une collection de 8 tableaux célèbres avec des explications détaillées.
+Ce projet implémente un système multi-agents basé sur la méthodologie AEIO pour un guide touristique intelligent dans un environnement muséal. Le système utilise JADE (Java Agent DEvelopment Framework) avec une interface graphique 2D vue du dessus style jeu vidéo.
 
-## 🎯 Fonctionnalités Principales
+## Architecture du Système
 
-### Agents du Système
+### Agents Implémentés
 
-1. **Agent Guide** (`GuideAgent`)
-   - Gère les visites guidées pour les groupes de touristes
-   - Fournit des explications détaillées sur chaque tableau
-   - Limite la taille des groupes (max 15 personnes)
-   - Suit la progression de la visite
+1. **Agent Guide** (`GuideAgent.java`)
+   - Spécialisations : Renaissance, Moderne, Impressionniste, Contemporain
+   - Gestion de groupes de touristes (3-8 personnes)
+   - Adaptation pédagogique selon le profil du groupe
+   - Communication avec le coordinateur
 
-2. **Agent Groupe de Touristes** (`TouristGroupAgent`)
-   - Représente un groupe de visiteurs avec nationalité, taille et caractéristiques
-   - Recherche et demande un guide disponible
-   - Simule les interactions et réactions du groupe
-   - Génère des statistiques de satisfaction
+2. **Agent Touriste** (`TouristAgent.java`)
+   - Profils diversifiés (nationalité, âge, préférences)
+   - États dynamiques (satisfaction, fatigue, intérêt)
+   - Comportements personnalisés selon la personnalité
 
-3. **Agent Coordinateur** (`CoordinatorAgent`)
-   - Supervise l'ensemble du système
-   - Optimise l'attribution des guides aux groupes
-   - Génère des statistiques en temps réel
-   - Gère les situations d'urgence
-   - Détecte les goulots d'étranglement
+3. **Agent Coordinateur** (`CoordinatorAgent.java`)
+   - Supervision globale du musée
+   - Optimisation des ressources
+   - Gestion des situations d'urgence
+   - Collecte de statistiques
 
-### Collection d'Art
+### Interface Graphique
 
-L'exposition comprend 8 œuvres célèbres :
-- **La Joconde** - Léonard de Vinci (1503)
-- **La Nuit Étoilée** - Vincent van Gogh (1889)
-- **Guernica** - Pablo Picasso (1937)
-- **Le Cri** - Edvard Munch (1893)
-- **La Persistance de la Mémoire** - Salvador Dalí (1931)
-- **Les Demoiselles d'Avignon** - Pablo Picasso (1907)
-- **La Grande Vague de Kanagawa** - Hokusai (1830)
-- **American Gothic** - Grant Wood (1930)
+- **Vue 2D du musée** avec représentation des agents en temps réel
+- **Animations fluides** des déplacements
+- **Indicateurs visuels** de satisfaction et fatigue
+- **Panneau de contrôle** interactif
+- **Logs système** en temps réel
 
-## 🛠️ Architecture Technique
+## Prérequis
 
-### Structure du Projet
-```
-src/
-├── agents/
-│   ├── GuideAgent.java
-│   ├── TouristGroupAgent.java
-│   └── CoordinatorAgent.java
-├── models/
-│   ├── Tableau.java
-│   └── VisitorGroup.java
-├── config/
-│   └── ExhibitionConfig.java
-└── main/
-    └── ExpositionSystem.java
-```
+### Logiciels Requis
 
-### Technologies Utilisées
-- **JADE** (Java Agent DEvelopment Framework)
-- **Java 8+**
-- Services d'annuaire JADE (Pages Jaunes)
-- Communication par messages ACL (Agent Communication Language)
+- **Java JDK 8 ou supérieur**
+- **JADE Framework** (version 4.5.0 ou supérieure)
+- **IDE Java** (IntelliJ IDEA, Eclipse, ou NetBeans recommandé)
 
-## 🚀 Installation et Exécution
+### Téléchargement de JADE
 
-### Prérequis
-1. Java JDK 8 ou supérieur
-2. JADE Framework (`lib/jade.jar` dans le projet)
-3. IDE Java (Eclipse, IntelliJ, etc.) - optionnel
+1. Aller sur le site officiel JADE : http://jade.tilab.com/
+2. Télécharger JADE (Binary Distribution)
+3. Extraire l'archive dans un dossier (ex: `C:\jade` ou `/opt/jade`)
 
-### Configuration
-1. Télécharger JADE depuis [jade.tilab.com](http://jade.tilab.com/)
-2. Placer `jade.jar` dans le dossier `lib/` du projet
-3. Compiler tous les fichiers Java
+## Installation et Configuration
 
-## 🚀 **Compilation et Lancement**
+### Étape 1 : Préparation du Projet
 
-### **Compilation du Projet**
 ```bash
-# Compilation de tous les fichiers Java avec JADE dans le classpath
-javac -cp "lib/jade.jar" src/agents/*.java src/models/*.java src/config/*.java src/main/*.java
+# Créer le répertoire du projet
+mkdir MuseumGuideSystem
+cd MuseumGuideSystem
+
+# Créer la structure des dossiers
+mkdir src
+mkdir lib
+mkdir classes
 ```
 
-### **Lancement du Système**
+### Étape 2 : Copier les Fichiers JADE
 
-#### **Option 1 : Lancement Direct (Recommandé)**
+Copier les fichiers JAR de JADE dans le dossier `lib/` :
+- `jade.jar`
+- `commons-codec.jar` (si présent dans JADE)
+
+### Étape 3 : Placer les Fichiers Source
+
+Placer tous les fichiers Java dans le dossier `src/` :
+- `GuideAgent.java`
+- `TouristAgent.java`
+- `CoordinatorAgent.java`
+- `MuseumGUI.java`
+- `MuseumSystemLauncher.java`
+
+## Compilation
+
+### Option 1 : Compilation en Ligne de Commande
+
 ```bash
-# Lancement du système complet avec interface JADE GUI
-java -cp "lib/jade.jar:src" main.ExpositionSystem
+# Windows
+javac -cp "lib\jade.jar;lib\*" -d classes src\*.java
+
+# Linux/Mac
+javac -cp "lib/jade.jar:lib/*" -d classes src/*.java
 ```
 
-#### **Option 2 : Lancement avec JADE Boot (Manuel)**
+### Option 2 : Utilisation d'un IDE
+
+1. **Créer un nouveau projet Java**
+2. **Ajouter JADE au classpath** :
+   - IntelliJ : File → Project Structure → Libraries → + → Java → Sélectionner jade.jar
+   - Eclipse : Propriétés du projet → Java Build Path → Libraries → Add External JARs
+3. **Importer les fichiers source**
+4. **Compiler** (généralement automatique dans l'IDE)
+
+## Exécution
+
+### Méthode 1 : Depuis l'IDE
+
+1. Configurer la classe principale : `MuseumSystemLauncher`
+2. S'assurer que JADE est dans le classpath
+3. Exécuter le projet
+
+### Méthode 2 : Ligne de Commande
+
 ```bash
-# Démarrage de JADE avec GUI pour créer les agents manuellement
-java -cp "lib/jade.jar:src" jade.Boot -gui
+# Windows
+java -cp "classes;lib\jade.jar;lib\*" MuseumSystemLauncher
 
-# Puis dans l'interface JADE, créer les agents :
-# - CoordinatorAgent : agents.CoordinatorAgent
-# - GuideAgent : agents.GuideAgent  
-# - TouristGroupAgent : agents.TouristGroupAgent
+# Linux/Mac
+java -cp "classes:lib/jade.jar:lib/*" MuseumSystemLauncher
 ```
 
-#### **Option 3 : Lancement en Mode Debug**
+### Méthode 3 : Script de Lancement
+
+**Windows (`run.bat`)**:
+```batch
+@echo off
+set JADE_CP=lib\jade.jar
+set PROJECT_CP=classes
+java -cp "%PROJECT_CP%;%JADE_CP%" MuseumSystemLauncher
+pause
+```
+
+**Linux/Mac (`run.sh`)**:
 ```bash
-# Avec logs détaillés pour le debugging
-java -cp "lib/jade.jar:src" -Djade.debug=true main.ExpositionSystem
+#!/bin/bash
+JADE_CP="lib/jade.jar"
+PROJECT_CP="classes"
+java -cp "${PROJECT_CP}:${JADE_CP}" MuseumSystemLauncher
 ```
 
-### **Pour Windows**
-```cmd
-# Compilation
-javac -cp "lib\jade.jar" src\agents\*.java src\models\*.java src\config\*.java src\main\*.java
+## Utilisation de l'Interface Graphique
 
-# Lancement
-java -cp "lib\jade.jar;src" main.ExpositionSystem
-```
+### Démarrage
+1. Lancer le système via `MuseumSystemLauncher`
+2. L'interface graphique s'ouvre automatiquement
+3. Les agents JADE se créent et commencent à interagir
 
-### **Pour Linux/Mac**
-```bash
-# Compilation
-javac -cp "lib/jade.jar" src/agents/*.java src/models/*.java src/config/*.java src/main/*.java
+### Contrôles Disponibles
+- **Démarrer Simulation** : Lance la démonstration automatique
+- **Pause/Reprise** : Contrôle de l'animation
+- **Reset** : Remet à zéro la simulation
+- **Ajouter Touriste** : Ajoute un nouveau touriste
+- **Slider Vitesse** : Ajuste la vitesse d'animation
 
-# Lancement
-java -cp "lib/jade.jar:src" main.ExpositionSystem
-```
+### Éléments Visuels
 
-### **Vérification du Lancement**
-Une fois lancé, vous devriez voir :
-```
-🏛️  DÉMARRAGE DU SYSTÈME D'EXPOSITION
-=====================================
-👔 Coordinateur démarré
-👨‍🏫 Guide GuideMartin démarré
-👨‍🏫 Guide GuideSophie démarré
-👥 Groupe_Français démarré (8 personnes, Française)
-...
-```
+#### Légende des Couleurs
+- **Bleu** : Agents Guides
+- **Rouge/Orange/Vert** : Agents Touristes (selon satisfaction)
+- **Orange** : Tableaux/Œuvres d'art
+- **Gris** : Zones spéciales (Point A, Salle de repos, Sortie)
 
-### **Paramètres Optionnels**
-```bash
-# Désactiver l'interface graphique JADE
-java -cp "lib/jade.jar:src" -Djade.gui=false main.ExpositionSystem
+#### Indicateurs
+- **Barres de progression** : Satisfaction (vert) et Fatigue (rouge) des touristes
+- **Points jaunes** : Agents en mouvement
+- **Textes** : Noms des agents et spécialisations
 
-# Modifier la durée de simulation via propriétés système
-java -cp "lib/jade.jar:src" -Dsimulation.duration=5 main.ExpositionSystem
-```
+## Fonctionnalités Démontrées
 
-### Paramètres de Configuration
-Dans `ExhibitionConfig.java` :
-- `NOMBRE_GUIDES_INITIAL = 5` : Nombre de guides au démarrage
-- `TAILLE_MAX_GROUPE = 15` : Taille maximale d'un groupe
-- `TEMPS_EXPLICATION_PAR_TABLEAU = 5` : Temps par tableau (en secondes)
-- `DUREE_SIMULATION_MINUTES = 3` : Durée de la simulation
+### Comportements des Agents
 
-## 📊 Fonctionnement du Système
+1. **Formation de Groupes**
+   - Les touristes rejoignent automatiquement les guides disponibles
+   - Seuil minimum de 3 touristes pour démarrer une visite
 
-### Cycle de Vie d'une Visite
+2. **Visites Guidées**
+   - Parcours adapté selon la spécialisation du guide
+   - Explications personnalisées selon le profil des touristes
+   - Gestion du rythme selon la fatigue du groupe
 
-1. **Arrivée du Groupe**
-   - Création d'un agent groupe avec nationalité et taille
-   - Enregistrement au point de rendez-vous (Point A)
+3. **Interactions Sociales**
+   - Questions des touristes curieux
+   - Partage d'opinions entre touristes
+   - Négociation pour les pauses
 
-2. **Recherche de Guide**
-   - Consultation des services d'annuaire JADE
-   - Envoi de demande aux guides disponibles
-   - Attribution automatique ou mise en file d'attente
+4. **Coordination Globale**
+   - Surveillance des flux par le coordinateur
+   - Recommandations aux guides
+   - Gestion des situations d'urgence simulées
 
-3. **Visite Guidée**
-   - Présentation séquentielle des 8 tableaux
-   - Explications détaillées pour chaque œuvre
-   - Simulation d'interactions (questions, réactions)
+### Métriques Observables
 
-4. **Fin de Visite**
-   - Génération de statistiques de satisfaction
-   - Libération du guide pour un nouveau groupe
-   - Calcul des métriques de performance
+- **Satisfaction des touristes** en temps réel
+- **Taux d'occupation** des différentes zones
+- **Performance des guides** (efficacité, satisfaction générée)
+- **Statistiques de popularité** des œuvres
 
-### Communication Inter-Agents
-
-#### Types de Messages
-- `TOUR_REQUEST` : Demande de visite d'un groupe
-- `TOUR_ACCEPTED` : Acceptation par un guide
-- `TOUR_REFUSED` : Refus (guide indisponible)
-- `TABLEAU_INFO` : Information sur un tableau
-- `TOUR_FINISHED` : Fin de visite
-- `EMERGENCY` : Situation d'urgence
-- `PRIORITY_GROUP` : Groupe prioritaire (VIP)
-
-#### Protocoles de Communication
-```
-Groupe → Guide : REQUEST(TOUR_REQUEST:groupId:taille)
-Guide → Groupe : AGREE(TOUR_ACCEPTED:groupId) | REFUSE(TOUR_REFUSED)
-Guide → Groupe : INFORM(TABLEAU_INFO:groupId:tableau:explication)
-Guide → Coordinateur : INFORM(TOUR_FINISHED:groupId:guideId:taille)
-```
-
-## 📈 Métriques et Statistiques
-
-### Indicateurs de Performance
-- **Visites complétées** : Nombre total de groupes ayant terminé
-- **Touristes servis** : Nombre total de personnes guidées
-- **Taille moyenne des groupes** : Calcul automatique
-- **Taux de satisfaction** : Basé sur plusieurs critères
-- **Charge de travail des guides** : Répartition équitable
-- **Temps d'attente moyen** : Optimisation continue
-
-### Facteurs de Satisfaction
-- Durée de visite (optimal : 45-90 minutes)
-- Nombre de tableaux vus (minimum 6/8)
-- Taille du groupe (optimal ≤ 8 personnes)
-- Statut VIP (+bonus)
-- Facteur aléatoire (variations naturelles)
-
-## 🎛️ Fonctionnalités Avancées
-
-### Gestion des Urgences
-Le coordinateur peut traiter :
-- **Situations d'urgence** : Pause automatique des visites
-- **Problèmes de guides** : Réassignation automatique
-- **Groupes prioritaires** : Traitement en tête de file
-
-### Optimisation Automatique
-- **Détection de goulots d'étranglement** : >3 groupes en attente
-- **Suggestions d'amélioration** : Guides supplémentaires, circuits alternatifs
-- **Répartition de charge** : Équilibrage entre guides
-
-### Simulation Réaliste
-- **Nationalités diverses** : 16 nationalités supportées
-- **Langues multiples** : Adaptation automatique
-- **Groupes familiaux** : Détection par tranche d'âge
-- **Réactions dynamiques** : Questions, exclamations, interactions
-
-## 🔧 Personnalisation
-
-### Ajout de Nouveaux Tableaux
-```java
-// Dans ExhibitionConfig.java
-tableaux.add(new Tableau(
-    "TAB009", "Nom du Tableau", "Artiste", 2024, "Style",
-    "Description courte",
-    "Explication détaillée pour le guide...",
-    largeur, hauteur, "Emplacement"
-));
-```
-
-### Modification des Paramètres
-```java
-// Configuration des guides
-public static final int NOMBRE_GUIDES_INITIAL = 3; // Réduire/augmenter
-public static final int TAILLE_MAX_GROUPE = 10;    // Ajuster la capacité
-
-// Configuration simulation
-public static final int DUREE_SIMULATION_MINUTES = 5; // Prolonger
-```
-
-### Ajout de Nationalités
-```java
-// Dans getSupportedNationalities()
-return Arrays.asList(
-    "Française", "Allemande", /* ... existantes ... */
-    "Mexicaine", "Norvégienne" // Nouvelles nationalités
-);
-```
-
-## 🐛 Résolution de Problèmes
+## Dépannage
 
 ### Problèmes Courants
 
-1. **Agents ne se trouvent pas**
-   - Vérifier que JADE est correctement configuré
-   - S'assurer que tous les agents sont enregistrés dans les Pages Jaunes
+1. **ClassNotFoundException pour JADE**
+   - Vérifier que jade.jar est dans le classpath
+   - S'assurer d'utiliser la bonne version de JADE
 
-2. **Pas de guides disponibles**
-   - Augmenter `NOMBRE_GUIDES_INITIAL`
-   - Réduire `TAILLE_MAX_GROUPE`
+2. **Agents ne se créent pas**
+   - Vérifier les logs dans la console
+   - S'assurer qu'aucun autre processus n'utilise le port 1099
 
-3. **Simulation trop rapide/lente**
-   - Ajuster `TEMPS_EXPLICATION_PAR_TABLEAU`
-   - Modifier les intervalles dans `TickerBehaviour`
+3. **Interface graphique ne s'affiche pas**
+   - Vérifier la configuration Java Swing
+   - Essayer avec différentes versions de Java
+
+4. **Erreur de mémoire**
+   - Augmenter la mémoire JVM : `java -Xmx512m -cp ...`
 
 ### Logs et Debugging
-```java
-// Activer les logs détaillés
-System.setProperty("jade.debug", "true");
 
-// Observer les messages dans JADE GUI
-// Tools → Introspector → Sélectionner agent
+- Les logs système s'affichent dans la console
+- L'interface graphique inclut une zone de logs en temps réel
+- Mode debug activable dans `MuseumLogger`
+
+## Extensions Possibles
+
+### Fonctionnalités Avancées
+1. **Sauvegarde/Chargement** de configurations de musée
+2. **Statistiques détaillées** exportables
+3. **Mode éditeur** pour créer de nouveaux parcours
+4. **Intelligence artificielle** plus avancée pour les agents
+5. **Simulation de plusieurs musées** simultanément
+
+### Intégrations Techniques
+1. **Base de données** pour persistance des données
+2. **Services web** pour données externes
+3. **Machine learning** pour optimisation automatique
+4. **Réalité augmentée** pour interface 3D
+
+## Structure des Fichiers
+
+```
+MuseumGuideSystem/
+├── src/
+│   ├── GuideAgent.java
+│   ├── TouristAgent.java
+│   ├── CoordinatorAgent.java
+│   ├── MuseumGUI.java
+│   └── MuseumSystemLauncher.java
+├── lib/
+│   └── jade.jar
+├── classes/
+│   └── (fichiers compilés)
+├── run.bat (Windows)
+├── run.sh (Linux/Mac)
+└── README.md
 ```
 
-## 📋 Exemple d'Exécution
+## Support et Documentation
 
-### Sortie Console Typique
-```
-🏛️  DÉMARRAGE DU SYSTÈME D'EXPOSITION
-=====================================
-👔 Coordinateur démarré
-👨‍🏫 Guide GuideMartin démarré
-👨‍🏫 Guide GuideSophie démarré
-👥 Groupe_Français démarré (8 personnes, Française)
-👥 Groupe_Allemands démarré (12 personnes, Allemande)
-
-✓ Groupe Groupe_Français assigné au guide GuideMartin
-La visite commence au Point A - Entrée principale !
-
-=== GUIDE GuideMartin ===
-Tableau 1/8: La Joconde
-Groupe: Groupe_Français
-Explication: Chef-d'œuvre de Léonard de Vinci...
-================================
-
-👥 GROUPE Groupe_Français (Française)
-📍 Devant: La Joconde
-👂 Écoute les explications du guide GuideMartin
-💬 Le groupe semble captivé par les explications
-❓ Un touriste demande: "Quelle est la technique utilisée ici ?"
-
-📊 ÉTAT DU SYSTÈME
-👨‍🏫 Guides actifs: 5
-👥 Groupes présents: 7
-🔄 Assignments actives: 2
-⏳ Groupes en attente: 1
-
-🎉 VISITE TERMINÉE pour le groupe Groupe_Français
-📋 Bilan de la visite:
-   - Groupe: Française (8 personnes)
-   - Guide: GuideMartin
-   - Tableaux vus: 8
-   - Satisfaction: Excellente ⭐⭐⭐⭐⭐
-```
-
-## 🎨 Extensions Possibles
-
-### Améliorations Suggérées
-1. **Interface Web** : Monitoring en temps réel
-2. **Base de données** : Persistance des statistiques
-3. **IA/ML** : Prédiction des préférences de groupes
-4. **Réalité Augmentée** : Intégration avec dispositifs mobiles
-5. **Multilinguisme** : Guides parlant plusieurs langues
-6. **Circuits thématiques** : Parcours spécialisés par style/époque
-
-### Intégrations Avancées
-- **Capteurs IoT** : Détection de foule, température
-- **Blockchain** : Traçabilité des œuvres
-- **API externes** : Météo, événements, réservations
-- **Machine Learning** : Optimisation prédictive des flux
-
-## 📝 Licence et Contributions
-
-### Structure de Fichiers
-- `agents/` : Logique métier des agents
-- `models/` : Modèles de données
-- `config/` : Configuration centralisée
-- `main/` : Point d'entrée du système
-
-### Bonnes Pratiques
-- Respecter les conventions de nommage JADE
-- Gérer proprement les ressources (deregister agents)
-- Implémenter la gestion d'erreurs
-- Documenter les protocoles de communication
-
-## 🔍 Tests et Validation
-
-### Scénarios de Test
-1. **Test de charge** : 20+ groupes simultanés
-2. **Test de robustesse** : Pannes de guides
-3. **Test de satisfaction** : Différentes configurations
-4. **Test d'optimisation** : Goulots d'étranglement volontaires
-
-### Métriques de Validation
-- Tous les groupes doivent être servis
-- Aucun groupe ne doit attendre >5 minutes (simulation)
-- Satisfaction moyenne >3/5
-- Répartition équitable entre guides
-
----
-
-**Développé avec JADE Framework**  
-*Système de gestion intelligente d'exposition d'art*
-
-## 🆘 Support
-
-Pour toute question ou problème :
-1. Consulter la documentation JADE officielle
-2. Vérifier les logs du coordinateur
-3. Utiliser l'interface graphique JADE pour le debugging
-4. Ajuster les paramètres dans `ExhibitionConfig.java`
-
-**Version du système** : 1.0  
-**Compatibilité JADE** : 4.5+  
-**Dernière mise à jour** : 2025
+- **Documentation JADE** : http://jade.tilab.com/documentation/
+- **Tutoriels JADE** : http://jade.tilab.com/documentation/tutorials/
+- **Code source** : Commenté en français pour faciliter la compréhension

@@ -1,0 +1,17 @@
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/base/BaseAgent.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/tourist/Personality.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/base/StatusReporter.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/tourist/TouristAgent.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/guide/TourManager.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/base/MessageHandler.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/tourist/BehaviorManager.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/utils/ServiceFinder.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/launcher/SimpleLauncher.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/launcher/MuseumSystemLauncher.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/guide/GroupHandler.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/guide/GuideProfile.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/guide/GuideAgent.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/launcher/MuseumVisualizationApp.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/tourist/TouristProfile.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/tourist/SatisfactionTracker.java
+/home/amine/Bureau/M2/Fondamentaux_IA/Intelligent_Agents/TP_Jade_Intelligent_Agent/src/main/java/agents/base/AgentStatus.java

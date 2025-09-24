@@ -1,18 +1,18 @@
 agents/base/MessageHandler.class
 agents/guide/TourManager$2.class
-launcher/MuseumVisualizationApp$Artwork.class
 agents/base/StatusReporter.class
 agents/base/AgentStatus.class
 agents/tourist/ImpatienceBehavior.class
+launcher/MuseumVisualizationApp$AgentType.class
 agents/guide/GuideAgent.class
 agents/guide/GuideAgent$EnhancedGroupManagementBehavior.class
 agents/guide/GuideAgent$12.class
 agents/tourist/BreakRequestBehavior.class
 agents/tourist/Personality.class
-launcher/MuseumVisualizationApp$Corridor.class
 agents/tourist/TouristAgent$EnhancedGuideInteractionBehavior.class
 agents/tourist/TouristAgent$2.class
 agents/tourist/TouristAgent$EnhancedGuideInteractionBehavior$3.class
+launcher/MuseumVisualizationApp$AgentStatus.class
 agents/guide/GuideAgent$7.class
 agents/tourist/SatisfactionTracker$ExperienceRecord.class
 launcher/MuseumVisualizationApp$TourGroup.class
@@ -53,7 +53,6 @@ launcher/MuseumVisualizationApp$1.class
 agents/tourist/TouristAgent$GroupCohesionBehavior.class
 launcher/MuseumSystemLauncher.class
 agents/tourist/TouristAgent$EnhancedGuideInteractionBehavior$2.class
-launcher/MuseumVisualizationApp$TourGroup$1.class
 agents/guide/GuideAgent$CoordinatorCommunicationBehavior$1.class
 launcher/MuseumSystemLauncher$2.class
 agents/guide/GuideAgent$GroupCohesionMonitorBehavior.class
@@ -62,6 +61,7 @@ agents/guide/GuideAgent$10.class
 agents/guide/GuideAgent$GroupFormation.class
 agents/tourist/TouristAgent$CoordinatorRegistrationBehavior.class
 agents/guide/GuideAgent$8.class
+launcher/MuseumVisualizationApp$Room.class
 agents/tourist/TouristAgent.class
 agents/guide/GroupHandler.class
 agents/guide/GuideAgent$11.class
@@ -72,7 +72,6 @@ agents/guide/GuideAgent$GroupManager.class
 agents/guide/TourManager$1.class
 agents/tourist/OpinionBehavior.class
 agents/guide/GroupHandler$TouristStats.class
-launcher/MuseumVisualizationApp$MuseumRoom.class
 agents/guide/GuideAgent$4.class
 agents/guide/GroupHandler$GroupDynamics.class
 agents/tourist/QuestionBehavior.class

@@ -39,6 +39,7 @@ import java.time.format.DateTimeFormatter;
 /**
  * Interface de visualisation du système multi-agents du musée
  * Intégration cohérente avec les agents BDI (GuideAgent, TouristAgent)
+ * VERSION CORRIGÉE: Communication fixée et gestion des salles améliorée
  */
 public class MuseumVisualizationApp extends Application {
 
@@ -107,8 +108,17 @@ public class MuseumVisualizationApp extends Application {
     // Gestion des visites cycliques
     private Queue<List<VisualAgent>> waitingTouristGroups = new LinkedList<>();
     private double lastGroupArrival = 0;
-    private double groupArrivalInterval = 15.0; // Nouveau groupe toutes les 15 secondes
     private int groupCounter = 0;
+    
+    // CORRECTION: Configuration du système
+    private int groupSizeMin = 3;
+    private int groupSizeMax = 7;
+    private double groupArrivalInterval = 15.0;
+    private int numberOfGuides = 3;
+    
+    // CORRECTION: Gestion des salles occupées
+    private Map<String, String> roomOccupancy = new HashMap<>(); // Salle -> ID du groupe
+    private Set<String> waitingForRoom = new HashSet<>(); // Groupes en attente d'une salle
     
     @Override
     public void start(Stage primaryStage) {
@@ -193,6 +203,9 @@ public class MuseumVisualizationApp extends Application {
         
         titleBox.getChildren().addAll(title, subtitle);
         
+        // CORRECTION: Ajouter menu de configuration
+        VBox configMenu = createConfigurationMenu();
+        
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
@@ -200,8 +213,93 @@ public class MuseumVisualizationApp extends Application {
         Button pauseBtn = createIOSButton("PAUSE", WARNING, () -> pauseSystem());
         Button resetBtn = createIOSButton("RESET", DANGER, () -> resetSystem());
         
-        header.getChildren().addAll(logo, titleBox, spacer, startBtn, pauseBtn, resetBtn);
+        header.getChildren().addAll(logo, titleBox, configMenu, spacer, startBtn, pauseBtn, resetBtn);
         return header;
+    }
+    
+    private VBox createConfigurationMenu() {
+        VBox configBox = new VBox(5);
+        configBox.setAlignment(Pos.CENTER_LEFT);
+        
+        Label configTitle = new Label("CONFIGURATION");
+        configTitle.setFont(Font.font("SF Pro Text", FontWeight.BOLD, 10));
+        configTitle.setTextFill(TEXT_SECONDARY);
+        
+        // CORRECTION: Tout sur une seule ligne horizontale
+        HBox allConfigBox = new HBox(15);
+        allConfigBox.setAlignment(Pos.CENTER_LEFT);
+        
+        // Taille des groupes
+        HBox groupSizeBox = new HBox(5);
+        groupSizeBox.setAlignment(Pos.CENTER_LEFT);
+        
+        Label groupSizeLabel = new Label("Taille:");
+        groupSizeLabel.setFont(Font.font("SF Pro Text", 9));
+        groupSizeLabel.setTextFill(TEXT_PRIMARY);
+        
+        Spinner<Integer> maxSizeSpinner = new Spinner<>(3, 12, groupSizeMax);
+        maxSizeSpinner.setPrefWidth(50);
+        maxSizeSpinner.setStyle("-fx-background-color: #2c2c2e; -fx-text-fill: white;");
+        
+        Spinner<Integer> minSizeSpinner = new Spinner<>(2, 8, groupSizeMin);
+        minSizeSpinner.setPrefWidth(50);
+        minSizeSpinner.setStyle("-fx-background-color: #2c2c2e; -fx-text-fill: white;");
+        minSizeSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
+            groupSizeMin = newVal;
+            if (groupSizeMin > groupSizeMax) {
+                groupSizeMax = groupSizeMin + 2;
+                maxSizeSpinner.getValueFactory().setValue(groupSizeMax);
+            }
+        });
+        
+        Label toLabel = new Label("à");
+        toLabel.setFont(Font.font("SF Pro Text", 8));
+        toLabel.setTextFill(TEXT_SECONDARY);
+        
+        maxSizeSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
+            groupSizeMax = newVal;
+            if (groupSizeMax < groupSizeMin) {
+                groupSizeMin = groupSizeMax - 2;
+                minSizeSpinner.getValueFactory().setValue(Math.max(2, groupSizeMin));
+            }
+        });
+        
+        groupSizeBox.getChildren().addAll(groupSizeLabel, minSizeSpinner, toLabel, maxSizeSpinner);
+        
+        // Fréquence d'arrivée
+        HBox frequencyBox = new HBox(5);
+        frequencyBox.setAlignment(Pos.CENTER_LEFT);
+        
+        Label frequencyLabel = new Label("Fréq(s):");
+        frequencyLabel.setFont(Font.font("SF Pro Text", 9));
+        frequencyLabel.setTextFill(TEXT_PRIMARY);
+        
+        Spinner<Double> frequencySpinner = new Spinner<>(5.0, 60.0, groupArrivalInterval, 5.0);
+        frequencySpinner.setPrefWidth(60);
+        frequencySpinner.setStyle("-fx-background-color: #2c2c2e; -fx-text-fill: white;");
+        frequencySpinner.valueProperty().addListener((obs, oldVal, newVal) -> groupArrivalInterval = newVal);
+        
+        frequencyBox.getChildren().addAll(frequencyLabel, frequencySpinner);
+        
+        // Nombre de guides
+        HBox guidesBox = new HBox(5);
+        guidesBox.setAlignment(Pos.CENTER_LEFT);
+        
+        Label guidesLabel = new Label("Guides:");
+        guidesLabel.setFont(Font.font("SF Pro Text", 9));
+        guidesLabel.setTextFill(TEXT_PRIMARY);
+        
+        Spinner<Integer> guidesSpinner = new Spinner<>(1, 6, numberOfGuides);
+        guidesSpinner.setPrefWidth(50);
+        guidesSpinner.setStyle("-fx-background-color: #2c2c2e; -fx-text-fill: white;");
+        guidesSpinner.valueProperty().addListener((obs, oldVal, newVal) -> numberOfGuides = newVal);
+        
+        guidesBox.getChildren().addAll(guidesLabel, guidesSpinner);
+        
+        // Assembler tout sur une ligne
+        allConfigBox.getChildren().addAll(groupSizeBox, frequencyBox, guidesBox);
+        configBox.getChildren().addAll(configTitle, allConfigBox);
+        return configBox;
     }
     
     private VBox createScenariosPanel() {
@@ -399,6 +497,8 @@ public class MuseumVisualizationApp extends Application {
     
     private void initializeGameWorld() {
         rooms.clear();
+        roomOccupancy.clear(); // CORRECTION: Nettoyer l'occupation des salles
+        
         rooms.add(new VisualRoom("Accueil", 80, 350, 100, 80, PRIMARY.deriveColor(0, 0.5, 1, 0.3)));
         rooms.add(new VisualRoom("Renaissance", 250, 120, 100, 80, SUCCESS.deriveColor(0, 0.5, 1, 0.3)));
         rooms.add(new VisualRoom("Art Moderne", 450, 120, 100, 80, WARNING.deriveColor(0, 0.5, 1, 0.3)));
@@ -455,8 +555,11 @@ public class MuseumVisualizationApp extends Application {
     private void update() {
         if (!systemRunning) return;
         
-        // Génération aléatoire de groupes de touristes
-        if (time - lastGroupArrival > groupArrivalInterval + (Math.random() * 10 - 5)) {
+        // CORRECTION: Vérifier si l'accueil peut accueillir de nouveaux groupes
+        boolean canGenerateNewGroup = canAccommodateNewGroup();
+        
+        // Génération conditionnelle de groupes de touristes
+        if (canGenerateNewGroup && time - lastGroupArrival > groupArrivalInterval + (Math.random() * 10 - 5)) {
             generateNewTouristGroup();
             lastGroupArrival = time;
         }
@@ -474,7 +577,7 @@ public class MuseumVisualizationApp extends Application {
             group.updateBDI(deltaTime);
         }
         
-        // Mise à jour des liens de communication
+        // CORRECTION: Nettoyer les liens expirés et réduire leur création
         networkLinks.removeIf(link -> link.isDead());
         for (VisualNetworkLink link : networkLinks) {
             link.update(deltaTime);
@@ -487,31 +590,89 @@ public class MuseumVisualizationApp extends Application {
         }
     }
     
+    /**
+     * CORRECTION: Vérifier si l'accueil peut accueillir un nouveau groupe
+     */
+    private boolean canAccommodateNewGroup() {
+        int maxWaitingGroups = Math.max(1, numberOfGuides);
+        int currentWaitingTourists = waitingTouristGroups.stream()
+            .mapToInt(List::size)
+            .sum();
+        
+        // Conditions pour autoriser un nouveau groupe :
+        // 1. Pas trop de groupes en attente
+        // 2. Pas trop de touristes individuels en attente
+        // 3. Au moins un guide disponible ou qui va bientôt se libérer
+        boolean hasSpaceForGroups = waitingTouristGroups.size() < maxWaitingGroups;
+        boolean hasSpaceForTourists = currentWaitingTourists < numberOfGuides * 6; // Max 6 touristes par guide
+        boolean hasAvailableGuide = agents.values().stream()
+            .anyMatch(agent -> agent.type == AgentType.GUIDE && 
+                      (agent.tourState == TourState.AVAILABLE || agent.tourState == TourState.WAITING));
+        
+        return hasSpaceForGroups && hasSpaceForTourists && hasAvailableGuide;
+    }
+    
     private void generateNewTouristGroup() {
-        if (waitingTouristGroups.size() >= 3) return; // Limite de groupes en attente
+        // CORRECTION: Régulation intelligente - vérifier la capacité d'accueil
+        int maxWaitingGroups = Math.max(1, numberOfGuides); // Au maximum 1 groupe par guide
+        int currentWaitingTourists = waitingTouristGroups.stream()
+            .mapToInt(List::size)
+            .sum();
+        
+        // Ne pas générer si trop de touristes en attente ou trop de groupes
+        if (waitingTouristGroups.size() >= maxWaitingGroups || currentWaitingTourists >= numberOfGuides * 8) {
+            addEvent("Accueil saturé - Arrivées suspendues temporairement", WARNING);
+            return;
+        }
         
         groupCounter++;
         List<VisualAgent> newGroup = new ArrayList<>();
-        int groupSize = 3 + (int)(Math.random() * 5); // Groupes de 3 à 7 personnes
+        int groupSize = groupSizeMin + (int)(Math.random() * (groupSizeMax - groupSizeMin + 1));
         
         VisualRoom accueil = findRoom("Accueil");
         if (accueil == null) return;
         
-        // Créer les touristes du nouveau groupe
+        // CORRECTION: Calcul de position pour éviter les superpositions
+        int currentWaitingGroupsCount = waitingTouristGroups.size();
+        double baseX = accueil.x + 15; // Marge depuis le bord gauche
+        double baseY = accueil.y + 15; // Marge depuis le haut
+        
+        // Espacement intelligent selon le nombre de groupes déjà présents
+        double groupSpacingY = 70; // Espacement vertical entre groupes
+        double currentGroupY = baseY + currentWaitingGroupsCount * groupSpacingY;
+        
+        // Si on dépasse la salle d'accueil, utiliser une deuxième colonne
+        if (currentGroupY + 50 > accueil.y + accueil.height) {
+            baseX += 120; // Deuxième colonne
+            currentGroupY = baseY + (currentWaitingGroupsCount % 2) * groupSpacingY;
+        }
+        
+        // Créer les touristes du nouveau groupe avec formation anti-superposition
         for (int i = 0; i < groupSize; i++) {
             VisualAgent tourist = new VisualAgent("TOURIST-G" + groupCounter + "-" + (i + 1), AgentType.TOURIST);
             
-            // Positionner aléatoirement dans la zone d'accueil
-            double offsetX = (Math.random() - 0.5) * 80;
-            double offsetY = (Math.random() - 0.5) * 60;
-            tourist.setPosition(accueil.x + accueil.width/2 + offsetX, accueil.y + accueil.height/2 + offsetY);
+            // Formation en rectangle compact : 3 personnes par ligne
+            int row = i / 3;
+            int col = i % 3;
+            double memberX = baseX + col * 25;
+            double memberY = currentGroupY + row * 22;
+            
+            // Vérification des limites de la salle d'accueil
+            if (memberX > accueil.x + accueil.width - 10) {
+                memberX = accueil.x + accueil.width - 10;
+            }
+            if (memberY > accueil.y + accueil.height - 10) {
+                memberY = accueil.y + accueil.height - 10;
+            }
+            
+            tourist.setPosition(memberX, memberY);
             
             // Profil BDI diversifié
             tourist.profile = new TouristProfile("Tourist G" + groupCounter + "-" + (i + 1));
             tourist.color = SUCCESS.interpolate(WARNING, tourist.profile.getSatisfaction());
             tourist.satisfaction = tourist.profile.getSatisfaction();
             tourist.fatigue = tourist.profile.getFatigue();
-            tourist.inGroup = false; // Pas encore assigné
+            tourist.inGroup = false;
             tourist.tourState = TourState.WAITING;
             
             agents.put(tourist.id, tourist);
@@ -519,7 +680,8 @@ public class MuseumVisualizationApp extends Application {
         }
         
         waitingTouristGroups.offer(newGroup);
-        addEvent("Nouveau groupe de " + groupSize + " touristes à l'accueil", SUCCESS);
+        addEvent("Nouveau groupe de " + groupSize + " touristes arrive (Total: " + 
+                (currentWaitingTourists + groupSize) + " en attente)", SUCCESS);
     }
     
     private void assignGuidesToWaitingGroups() {
@@ -546,22 +708,49 @@ public class MuseumVisualizationApp extends Application {
     }
     
     private void startGuidedTour(VisualAgent guide, List<VisualAgent> tourists) {
+        // CORRECTION: Le guide doit aller chercher les touristes à l'accueil
+        VisualRoom accueil = findRoom("Accueil");
+        if (accueil == null) return;
+        
         // Créer le groupe étoilé pour la visite
         VisualStarGroup tourGroup = new VisualStarGroup(guide.id, "Visite " + groupCounter);
         tourGroup.color = guide.color;
         tourGroup.cohesion = 0.7;
         
-        // Déplacer le guide à l'accueil
-        VisualRoom accueil = findRoom("Accueil");
-        if (accueil != null) {
-            animateAgentMovement(guide, accueil.x + accueil.width/2, accueil.y + accueil.height/2);
-        }
+        // CORRECTION: Si le guide n'est pas à l'accueil, l'y amener d'abord
+        boolean guideAtWelcome = Math.abs(guide.x - (accueil.x + accueil.width/2)) < 50 && 
+                                Math.abs(guide.y - (accueil.y + accueil.height/2)) < 50;
         
+        if (!guideAtWelcome) {
+            // Le guide va d'abord à l'accueil chercher les touristes
+            guide.tourState = TourState.WAITING; // En transit vers accueil
+            
+            Timeline goToWelcome = new Timeline(
+                new KeyFrame(Duration.seconds(2),
+                    new KeyValue(guide.xProperty, accueil.x + accueil.width/2, Interpolator.EASE_BOTH),
+                    new KeyValue(guide.yProperty, accueil.y + accueil.height/2, Interpolator.EASE_BOTH))
+            );
+            
+            goToWelcome.setOnFinished(e -> {
+                // Une fois arrivé à l'accueil, former le groupe
+                formTourGroup(guide, tourists, tourGroup);
+            });
+            
+            goToWelcome.play();
+            addEvent("Guide " + guide.name + " va chercher un groupe à l'accueil", PRIMARY);
+        } else {
+            // Le guide est déjà à l'accueil, former le groupe directement
+            formTourGroup(guide, tourists, tourGroup);
+        }
+    }
+    
+    private void formTourGroup(VisualAgent guide, List<VisualAgent> tourists, VisualStarGroup tourGroup) {
         // Assigner les touristes au groupe
         for (int i = 0; i < tourists.size(); i++) {
             VisualAgent tourist = tourists.get(i);
             tourist.inGroup = true;
             tourist.tourState = TourState.TOURING;
+            tourist.assignedGuideId = guide.id;
             
             double angle = (Math.PI * 2 * i) / tourists.size();
             double radius = 60;
@@ -586,7 +775,7 @@ public class MuseumVisualizationApp extends Application {
         tourGroup.updateBDIMetrics();
         starGroups.add(tourGroup);
         
-        addEvent("Guide " + guide.name + " prend en charge un groupe de " + tourists.size() + " personnes", PRIMARY);
+        addEvent("Guide " + guide.name + " prend en charge " + tourists.size() + " touristes", SUCCESS);
     }
     
     private List<String> generateTourPath() {
@@ -653,6 +842,10 @@ public class MuseumVisualizationApp extends Application {
     }
     
     private void renderMuseumRoom(VisualRoom room) {
+        // CORRECTION: Vérifier l'occupation réelle plutôt que juste le flag
+        boolean isOccupied = roomOccupancy.containsKey(room.name);
+        room.occupied = isOccupied;
+        
         if (room.occupied) {
             gc.setFill(room.color.brighter());
             gc.setGlobalAlpha(0.3);
@@ -680,9 +873,18 @@ public class MuseumVisualizationApp extends Application {
         double textX = room.x + (room.width - room.name.length() * 6) / 2;
         gc.fillText(room.name.toUpperCase(), textX, room.y + room.height / 2);
         
+        // CORRECTION: Afficher quel groupe occupe la salle
         if (room.occupied) {
             gc.setFill(DANGER);
             gc.fillOval(room.x + room.width - 15, room.y + 5, 8, 8);
+            
+            // Afficher l'ID du groupe occupant
+            String occupantId = roomOccupancy.get(room.name);
+            if (occupantId != null) {
+                gc.setFill(TEXT_SECONDARY);
+                gc.setFont(Font.font("SF Mono", 8));
+                gc.fillText(occupantId, room.x + 5, room.y + room.height - 5);
+            }
         }
     }
     
@@ -870,6 +1072,10 @@ public class MuseumVisualizationApp extends Application {
         // Indicateur système BDI
         gc.setFill(systemRunning ? SUCCESS : DANGER);
         gc.fillText("SYSTÈME: " + (systemRunning ? "ACTIF" : "ARRÊTÉ"), 10, 35);
+        
+        // CORRECTION: Afficher l'état des salles
+        gc.setFill(TEXT_SECONDARY);
+        gc.fillText("SALLES OCCUPÉES: " + roomOccupancy.size() + "/" + rooms.size(), 10, 50);
     }
     
     private void renderMiniMap() {
@@ -906,6 +1112,8 @@ public class MuseumVisualizationApp extends Application {
         starGroups.clear();
         networkLinks.clear();
         waitingTouristGroups.clear();
+        roomOccupancy.clear();
+        waitingForRoom.clear();
         
         // Créer coordinateur BDI
         VisualAgent coordinator = new VisualAgent("COORDINATEUR", AgentType.COORDINATOR);
@@ -915,23 +1123,24 @@ public class MuseumVisualizationApp extends Application {
         coordinator.tourState = TourState.AVAILABLE;
         agents.put(coordinator.id, coordinator);
         
-        // Créer guides BDI avec profils spécialisés (tous disponibles au début)
-        String[] guideNames = {"GUIDE-Renaissance", "GUIDE-Moderne", "GUIDE-Impressionniste"};
-        Color[] guideColors = {PRIMARY, CYAN, PINK};
-        String[] specializations = {"Renaissance", "Moderne", "Impressionniste"};
+        // CORRECTION: Créer le nombre configuré de guides BDI
+        String[] guideNames = {"Renaissance", "Moderne", "Impressionniste", "Sculptures", "Histoire", "Art"};
+        Color[] guideColors = {PRIMARY, CYAN, PINK, SUCCESS, WARNING, PURPLE};
         
-        for (int i = 0; i < 3; i++) {
-            VisualAgent guide = new VisualAgent(guideNames[i], AgentType.GUIDE);
-            // Guides en attente dans une zone de repos
-            guide.setPosition(850 + i * 40, 100 + i * 60);
-            guide.color = guideColors[i];
-            guide.satisfaction = 0.7;
-            guide.tourState = TourState.AVAILABLE; // Disponible pour assignation
-            guide.guideProfile = new GuideProfile(specializations[i], 5 + i * 2);
-            agents.put(guide.id, guide);
+        for (int i = 0; i < numberOfGuides; i++) {
+            String guideName = "GUIDE-" + guideNames[i % guideNames.length];
+            if (i >= guideNames.length) {
+                guideName += "-" + (i - guideNames.length + 2);
+            }
             
-            // Lien de communication BDI avec coordinateur
-            networkLinks.add(new VisualNetworkLink(coordinator.id, guide.id, PURPLE, 0.5));
+            VisualAgent guide = new VisualAgent(guideName, AgentType.GUIDE);
+            // Positionner les guides en zone d'attente
+            guide.setPosition(850 + (i % 2) * 60, 100 + (i / 2) * 80);
+            guide.color = guideColors[i % guideColors.length];
+            guide.satisfaction = 0.7;
+            guide.tourState = TourState.AVAILABLE;
+            guide.guideProfile = new GuideProfile(guideNames[i % guideNames.length], 5 + i * 2);
+            agents.put(guide.id, guide);
         }
         
         // Réinitialiser les compteurs
@@ -939,7 +1148,7 @@ public class MuseumVisualizationApp extends Application {
         groupCounter = 0;
         
         updateMetrics();
-        addEvent("Système BDI initialisé - 3 guides disponibles", SUCCESS);
+        addEvent("Système BDI initialisé - " + numberOfGuides + " guides disponibles", SUCCESS);
     }
     
     private void pauseSystem() {
@@ -953,6 +1162,8 @@ public class MuseumVisualizationApp extends Application {
         starGroups.clear();
         networkLinks.clear();
         waitingTouristGroups.clear();
+        roomOccupancy.clear(); // CORRECTION: Nettoyer l'occupation des salles
+        waitingForRoom.clear();
         
         for (VisualRoom room : rooms) {
             room.occupied = false;
@@ -1020,13 +1231,15 @@ public class MuseumVisualizationApp extends Application {
                 emergencyTourist.fatigue = 0.9;
                 emergencyTourist.showStatus = true;
                 
-                // Alerter le guide
-                VisualAgent guide = agents.get(groupInTour.guideId);
-                if (guide != null) {
-                    networkLinks.add(new VisualNetworkLink(emergencyTourist.id, guide.id, DANGER, 1.0));
+                // CORRECTION: Alerter seulement SON guide assigné
+                if (emergencyTourist.assignedGuideId != null) {
+                    VisualAgent assignedGuide = agents.get(emergencyTourist.assignedGuideId);
+                    if (assignedGuide != null) {
+                        networkLinks.add(new VisualNetworkLink(emergencyTourist.id, assignedGuide.id, DANGER, 1.0));
+                    }
                 }
                 
-                addEvent("URGENCE dans " + groupInTour.name + " - Intervention du guide", DANGER);
+                addEvent("URGENCE dans " + groupInTour.name + " - Intervention du guide assigné", DANGER);
             }
         }
     }
@@ -1136,6 +1349,66 @@ public class MuseumVisualizationApp extends Application {
                 new KeyValue(agent.yProperty, targetY, Interpolator.EASE_BOTH))
         );
         move.play();
+    }
+    
+    // CORRECTION: Améliorer la gestion des salles
+    
+    /**
+     * Vérifie si une salle peut être occupée par un groupe
+     */
+    private boolean canOccupyRoom(String roomName, String groupId) {
+        if (roomName.equals("Accueil") || roomName.equals("Sortie")) {
+            return true; // Ces salles peuvent être partagées
+        }
+        
+        return !roomOccupancy.containsKey(roomName);
+    }
+    
+    /**
+     * Occupe une salle pour un groupe spécifique
+     */
+    private void occupyRoom(String roomName, String groupId) {
+        if (!roomName.equals("Accueil") && !roomName.equals("Sortie")) {
+            roomOccupancy.put(roomName, groupId);
+            waitingForRoom.remove(groupId);
+        }
+    }
+    
+    /**
+     * Libère une salle occupée par un groupe
+     */
+    private void freeRoom(String roomName, String groupId) {
+        if (roomOccupancy.get(roomName) != null && roomOccupancy.get(roomName).equals(groupId)) {
+            roomOccupancy.remove(roomName);
+        }
+    }
+    
+    /**
+     * Trouve une salle alternative si la salle souhaitée est occupée
+     */
+    private String findAlternativeRoom(List<String> visitPath, int currentIndex, String groupId) {
+        if (currentIndex >= visitPath.size()) return null;
+        
+        String desiredRoom = visitPath.get(currentIndex);
+        
+        // Si la salle souhaitée est libre, la retourner
+        if (canOccupyRoom(desiredRoom, groupId)) {
+            return desiredRoom;
+        }
+        
+        // Sinon, chercher dans les salles connectées
+        VisualRoom currentRoom = findRoom(desiredRoom);
+        if (currentRoom != null && !currentRoom.nextRooms.isEmpty()) {
+            for (VisualRoom nextRoom : currentRoom.nextRooms) {
+                if (canOccupyRoom(nextRoom.name, groupId)) {
+                    return nextRoom.name;
+                }
+            }
+        }
+        
+        // En dernier recours, attendre
+        waitingForRoom.add(groupId);
+        return null;
     }
     
     // Méthodes utilitaires
@@ -1292,7 +1565,13 @@ public class MuseumVisualizationApp extends Application {
             Region spacer = new Region();
             HBox.setHgrow(spacer, Priority.ALWAYS);
             
-            Label status = new Label(room.occupied ? "OCCUPÉE" : "LIBRE");
+            // CORRECTION: Afficher le groupe occupant la salle
+            String statusText = room.occupied ? "OCCUPÉE" : "LIBRE";
+            if (room.occupied && roomOccupancy.containsKey(room.name)) {
+                statusText = roomOccupancy.get(room.name);
+            }
+            
+            Label status = new Label(statusText);
             status.setTextFill(room.occupied ? DANGER : SUCCESS);
             status.setFont(Font.font("SF Mono", 8));
             
@@ -1397,6 +1676,9 @@ public class MuseumVisualizationApp extends Application {
         boolean highlighted = false;
         boolean showStatus = false;
         
+        // CORRECTION: Ajouter l'ID du guide assigné pour éviter la communication croisée
+        String assignedGuideId = null;
+        
         // Intégration BDI
         TouristProfile profile; // Pour agents touristes
         GuideProfile guideProfile; // Pour agents guides
@@ -1486,30 +1768,38 @@ public class MuseumVisualizationApp extends Application {
                 return;
             }
             
-            // Déplacer le groupe vers la prochaine salle
+            // CORRECTION: Utiliser la gestion améliorée des salles
             String nextRoomName = visitPath.get(currentRoomIndex);
-            VisualRoom nextRoom = findRoom(nextRoomName);
+            String groupId = currentTourGroup.name;
             
+            // Vérifier si la salle est disponible ou trouver une alternative
+            String roomToVisit = findAlternativeRoom(visitPath, currentRoomIndex, groupId);
+            
+            if (roomToVisit == null) {
+                // Attendre que la salle se libère
+                addEvent("Groupe " + groupId + " attend une salle disponible", WARNING);
+                timeInCurrentRoom = roomVisitDuration - 2.0; // Réessayer dans 2 secondes
+                return;
+            }
+            
+            // Libérer la salle précédente
+            if (currentRoomIndex > 0) {
+                String previousRoomName = visitPath.get(currentRoomIndex - 1);
+                freeRoom(previousRoomName, groupId);
+            }
+            
+            // Occuper la nouvelle salle
+            occupyRoom(roomToVisit, groupId);
+            
+            // Déplacer le groupe vers la nouvelle salle
+            VisualRoom nextRoom = findRoom(roomToVisit);
             if (nextRoom != null) {
-                // Déplacer le guide
                 animateAgentMovement(this, 
                     nextRoom.x + nextRoom.width/2, 
                     nextRoom.y + nextRoom.height/2);
                 
-                // Marquer la salle comme occupée
-                nextRoom.occupied = true;
-                
-                // Si on quittait une salle, la libérer
-                if (currentRoomIndex > 0) {
-                    String previousRoomName = visitPath.get(currentRoomIndex - 1);
-                    VisualRoom previousRoom = findRoom(previousRoomName);
-                    if (previousRoom != null) {
-                        previousRoom.occupied = false;
-                    }
-                }
-                
                 timeInCurrentRoom = 0;
-                addEvent("Groupe " + currentTourGroup.name + " visite " + nextRoomName, 
+                addEvent("Groupe " + groupId + " visite " + roomToVisit, 
                         currentTourGroup.color);
             }
         }
@@ -1517,36 +1807,97 @@ public class MuseumVisualizationApp extends Application {
         private void finishTour() {
             if (currentTourGroup == null) return;
             
-            // Libérer la dernière salle
+            String groupId = currentTourGroup.name;
+            
+            // Libérer la dernière salle (sauf si c'est la sortie)
             if (currentRoomIndex > 0 && currentRoomIndex <= visitPath.size()) {
                 String lastRoomName = visitPath.get(currentRoomIndex - 1);
-                VisualRoom lastRoom = findRoom(lastRoomName);
-                if (lastRoom != null) {
-                    lastRoom.occupied = false;
+                if (!lastRoomName.equals("Sortie")) {
+                    freeRoom(lastRoomName, groupId);
                 }
             }
             
-            // Supprimer les touristes du système (ils sortent)
-            for (VisualGroupMember member : currentTourGroup.members) {
-                agents.remove(member.agentId);
-            }
+            // CORRECTION: Nettoyer complètement les références avant l'animation
+            VisualStarGroup groupToRemove = currentTourGroup;
             
-            // Supprimer le groupe de la liste
-            starGroups.remove(currentTourGroup);
-            
-            addEvent("Visite " + currentTourGroup.name + " terminée", SUCCESS);
-            
-            // Guide redevient disponible et retourne en zone d'attente
-            tourState = TourState.AVAILABLE;
+            // CORRECTION: Guide devient "EN TRANSIT" vers l'accueil (pas encore disponible)
+            tourState = TourState.WAITING; // En transit, pas encore disponible
             currentTourGroup = null;
             currentRoomIndex = 0;
             timeInCurrentRoom = 0;
             inGroup = false;
             
-            // Retourner en zone d'attente
-            animateAgentMovement(this, 
-                850 + (int)(Math.random() * 120), 
-                100 + (int)(Math.random() * 180));
+            // Supprimer le groupe de la liste AVANT l'animation pour éviter le rendu fantôme
+            starGroups.remove(groupToRemove);
+            
+            // Animation de sortie progressive pour les touristes
+            for (VisualGroupMember member : groupToRemove.members) {
+                VisualAgent tourist = agents.get(member.agentId);
+                if (tourist != null) {
+                    tourist.tourState = TourState.FINISHED;
+                    tourist.inGroup = false;
+                    tourist.assignedGuideId = null;
+                    
+                    Timeline exitAnimation = new Timeline(
+                        new KeyFrame(Duration.seconds(0),
+                            new KeyValue(tourist.xProperty, tourist.x),
+                            new KeyValue(tourist.yProperty, tourist.y)),
+                        new KeyFrame(Duration.seconds(2 + Math.random() * 3),
+                            new KeyValue(tourist.xProperty, tourist.x + (Math.random() - 0.5) * 100),
+                            new KeyValue(tourist.yProperty, CANVAS_HEIGHT + 50))
+                    );
+                    
+                    exitAnimation.setOnFinished(e -> {
+                        agents.remove(member.agentId);
+                    });
+                    
+                    exitAnimation.play();
+                }
+            }
+            
+            addEvent("Visite " + groupId + " terminée - Guide retourne à l'accueil", SUCCESS);
+            
+            // CORRECTION: Guide retourne d'abord à l'accueil, puis devient disponible
+            VisualRoom accueil = findRoom("Accueil");
+            if (accueil != null) {
+                Timeline returnToWelcome = new Timeline(
+                    new KeyFrame(Duration.seconds(3), // 3 secondes pour retourner à l'accueil
+                        new KeyValue(xProperty, accueil.x + accueil.width/2, Interpolator.EASE_BOTH),
+                        new KeyValue(yProperty, accueil.y + accueil.height/2, Interpolator.EASE_BOTH))
+                );
+                
+                returnToWelcome.setOnFinished(e -> {
+                    // Une fois arrivé à l'accueil, le guide devient disponible
+                    tourState = TourState.AVAILABLE;
+                    addEvent("Guide " + name + " disponible pour nouvelle visite", PRIMARY);
+                    
+                    // CORRECTION: Vérifier immédiatement s'il y a des groupes en attente
+                    // pour créer une continuité visuelle naturelle
+                    if (!waitingTouristGroups.isEmpty()) {
+                        Timeline delayBeforePickup = new Timeline(
+                            new KeyFrame(Duration.seconds(1), evt -> {
+                                // Donner une seconde au guide pour "voir" les touristes
+                                // puis les prendre en charge automatiquement
+                                if (tourState == TourState.AVAILABLE && !waitingTouristGroups.isEmpty()) {
+                                    List<VisualAgent> waitingGroup = waitingTouristGroups.poll();
+                                    if (waitingGroup != null) {
+                                        startGuidedTour(this, waitingGroup);
+                                    }
+                                }
+                            })
+                        );
+                        delayBeforePickup.play();
+                    }
+                });
+                
+                returnToWelcome.play();
+            }
+            
+            // Libérer la salle "Sortie" après un délai
+            Timeline delayedRoomFree = new Timeline(
+                new KeyFrame(Duration.seconds(6), e -> freeRoom("Sortie", groupId))
+            );
+            delayedRoomFree.play();
         }
         
         private void updateTouristBDI(double dt) {
@@ -1570,14 +1921,20 @@ public class MuseumVisualizationApp extends Application {
         }
         
         private void simulateBDIBehaviors() {
-            // Simulation des comportements BDI sans accéder aux classes non-publiques
+            // CORRECTION: Communication seulement avec le guide assigné
             Personality personality = profile.getPersonality();
             
-            // Simulation comportement question
-            if (personality.getCuriosity() > 0.7 && Math.random() < 0.1) {
-                VisualAgent guide = getFirstGuide();
-                if (guide != null) {
-                    networkLinks.add(new VisualNetworkLink(id, guide.id, CYAN, 0.7));
+            // Simulation comportement question - seulement avec le guide assigné
+            if (personality.getCuriosity() > 0.7 && Math.random() < 0.05 && assignedGuideId != null) {
+                VisualAgent assignedGuide = agents.get(assignedGuideId);
+                if (assignedGuide != null && assignedGuide.type == AgentType.GUIDE) {
+                    // Limiter la création de liens pour éviter la surcharge visuelle
+                    boolean hasExistingLink = networkLinks.stream()
+                        .anyMatch(link -> link.fromId.equals(id) && link.toId.equals(assignedGuideId));
+                    
+                    if (!hasExistingLink) {
+                        networkLinks.add(new VisualNetworkLink(id, assignedGuideId, CYAN, 0.7));
+                    }
                 }
             }
             

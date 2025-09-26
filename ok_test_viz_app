@@ -1,0 +1,1496 @@
+package launcher;
+
+import javafx.animation.*;
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Scene;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.*;
+import javafx.scene.effect.BlendMode;
+import javafx.scene.effect.DropShadow;
+import javafx.scene.layout.*;
+import javafx.scene.paint.*;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.ArcType;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import javafx.scene.text.Text;
+import javafx.stage.Stage;
+import javafx.util.Duration;
+import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.SimpleDoubleProperty;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+
+/**
+ * Interface style iOS Gaming avec visualisation Football Manager
+ */
+public class MuseumVisualizationApp extends Application {
+
+    // Configuration
+    private static final double CANVAS_WIDTH = 1000;
+    private static final double CANVAS_HEIGHT = 700;
+    
+    // Palette iOS Gaming
+    private static final Color BG_COLOR = Color.rgb(22, 22, 24);        // Noir iOS
+    private static final Color SURFACE_COLOR = Color.rgb(28, 28, 30);   // Gris foncé
+    private static final Color CARD_COLOR = Color.rgb(44, 44, 46);      // Gris carte
+    private static final Color PRIMARY = Color.rgb(10, 132, 255);       // Bleu iOS
+    private static final Color SUCCESS = Color.rgb(48, 209, 88);        // Vert iOS
+    private static final Color WARNING = Color.rgb(255, 159, 10);       // Orange iOS
+    private static final Color DANGER = Color.rgb(255, 69, 58);         // Rouge iOS
+    private static final Color PURPLE = Color.rgb(191, 90, 242);        // Violet iOS
+    private static final Color CYAN = Color.rgb(100, 210, 255);         // Cyan iOS
+    private static final Color PINK = Color.rgb(255, 55, 95);           // Rose iOS
+    private static final Color TEXT_PRIMARY = Color.rgb(255, 255, 255); // Blanc
+    private static final Color TEXT_SECONDARY = Color.rgb(152, 152, 157); // Gris clair
+    
+    // Composants principaux
+    private Canvas canvas;
+    private GraphicsContext gc;
+    private BorderPane root;
+    
+    // Panels latéraux
+    private VBox leftPanel;  // Scénarios
+    private VBox rightPanel; // Métriques et agents
+    private VBox agentListPanel;
+    private VBox metricsPanel;
+    private VBox roomsPanel;
+    private VBox eventsPanel;
+    
+    // Animation
+    private AnimationTimer gameLoop;
+    private ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+    private double time = 0;
+    private double deltaTime = 0.016;
+    
+    // Système Multi-Agents
+    private Map<String, GameAgent> agents = new HashMap<>();
+    private List<StarGroup> starGroups = new ArrayList<>();
+    private List<Room> rooms = new ArrayList<>();
+    private List<NetworkLink> networkLinks = new ArrayList<>();
+    private ConcurrentLinkedQueue<GameEvent> eventQueue = new ConcurrentLinkedQueue<>();
+    
+    // État du système
+    private boolean systemRunning = false;
+    private GameAgent selectedAgent = null;
+    private StarGroup selectedGroup = null;
+    
+    // Énumération pour les types d'agents
+    public enum AgentType {
+        COORDINATOR, GUIDE, TOURIST
+    }
+    
+    @Override
+    public void start(Stage primaryStage) {
+        primaryStage.setTitle("Museum AI System - iOS Gaming Edition");
+        primaryStage.setWidth(1600);
+        primaryStage.setHeight(900);
+        
+        initializeUI();
+        initializeGameWorld();
+        startGameLoop();
+        
+        Scene scene = new Scene(root);
+        scene.getStylesheets().add("data:text/css," + getIOSGamingCSS());
+        
+        // Interactions souris
+        canvas.setOnMouseClicked(e -> handleCanvasClick(e.getX(), e.getY()));
+        canvas.setOnMouseMoved(e -> handleCanvasHover(e.getX(), e.getY()));
+        
+        primaryStage.setScene(scene);
+        primaryStage.show();
+        
+        primaryStage.setOnCloseRequest(e -> shutdown());
+    }
+    
+    private void initializeUI() {
+        root = new BorderPane();
+        root.setStyle("-fx-background-color: #161618;");
+        
+        // Header iOS style
+        HBox header = createIOSHeader();
+        root.setTop(header);
+        
+        // Canvas central
+        canvas = new Canvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+        gc = canvas.getGraphicsContext2D();
+        
+        StackPane canvasContainer = new StackPane(canvas);
+        canvasContainer.setStyle(
+            "-fx-background-color: #1c1c1e;" +
+            "-fx-border-color: #3a3a3c;" +
+            "-fx-border-width: 1;"
+        );
+        
+        // Panel gauche - Scénarios
+        leftPanel = createScenariosPanel();
+        
+        // Panel droit - Métriques
+        rightPanel = createMetricsPanel();
+        
+        // Layout principal
+        HBox mainContent = new HBox();
+        mainContent.getChildren().addAll(leftPanel, canvasContainer, rightPanel);
+        HBox.setHgrow(canvasContainer, Priority.ALWAYS);
+        
+        root.setCenter(mainContent);
+    }
+    
+    private HBox createIOSHeader() {
+        HBox header = new HBox(30);
+        header.setPadding(new Insets(15, 20, 15, 20));
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setStyle(
+            "-fx-background-color: rgba(28, 28, 30, 0.95);" +
+            "-fx-border-color: #3a3a3c;" +
+            "-fx-border-width: 0 0 1 0;"
+        );
+        
+        // Logo animé style jeu
+        StackPane logo = new StackPane();
+        Circle outer = new Circle(18, Color.TRANSPARENT);
+        outer.setStroke(PRIMARY);
+        outer.setStrokeWidth(2);
+        Circle inner = new Circle(12, PRIMARY);
+        logo.getChildren().addAll(outer, inner);
+        
+        // Animation rotation
+        RotateTransition rotate = new RotateTransition(Duration.seconds(4), logo);
+        rotate.setByAngle(360);
+        rotate.setCycleCount(Timeline.INDEFINITE);
+        rotate.setInterpolator(Interpolator.LINEAR);
+        rotate.play();
+        
+        // Titre style gaming
+        VBox titleBox = new VBox(2);
+        Text title = new Text("MUSEUM AI SYSTEM");
+        title.setFont(Font.font("SF Pro Display", FontWeight.BOLD, 18));
+        title.setFill(TEXT_PRIMARY);
+        
+        Text subtitle = new Text("Multi-Agent Simulation");
+        subtitle.setFont(Font.font("SF Pro Text", 12));
+        subtitle.setFill(TEXT_SECONDARY);
+        
+        titleBox.getChildren().addAll(title, subtitle);
+        
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        
+        // Boutons style iOS gaming
+        Button startBtn = createIOSButton("START", SUCCESS, () -> startSystem());
+        Button pauseBtn = createIOSButton("PAUSE", WARNING, () -> pauseSystem());
+        Button resetBtn = createIOSButton("RESET", DANGER, () -> resetSystem());
+        
+        header.getChildren().addAll(logo, titleBox, spacer, startBtn, pauseBtn, resetBtn);
+        return header;
+    }
+    
+    private VBox createScenariosPanel() {
+        VBox panel = new VBox(10);
+        panel.setPrefWidth(200);
+        panel.setPadding(new Insets(15));
+        panel.setStyle("-fx-background-color: #1c1c1e;");
+        
+        Label title = new Label("SCENARIOS");
+        title.setFont(Font.font("SF Pro Display", FontWeight.BOLD, 14));
+        title.setTextFill(TEXT_PRIMARY);
+        
+        // Boutons de scénarios style gaming
+        VBox scenarioButtons = new VBox(8);
+        scenarioButtons.setPadding(new Insets(10, 0, 0, 0));
+        
+        scenarioButtons.getChildren().addAll(
+            createScenarioButton("Group Formation", "👥", PRIMARY, () -> runScenario("formation")),
+            createScenarioButton("Negotiation", "⚖️", WARNING, () -> runScenario("negotiation")),
+            createScenarioButton("Emergency", "🚨", DANGER, () -> runScenario("emergency")),
+            createScenarioButton("School Group", "🎓", SUCCESS, () -> runScenario("school")),
+            createScenarioButton("Multi-Groups", "🌐", PURPLE, () -> runScenario("multi")),
+            createScenarioButton("Adaptation", "🔄", CYAN, () -> runScenario("adaptation")),
+            createScenarioButton("Stress Test", "⚡", PINK, () -> runScenario("stress"))
+        );
+        
+        panel.getChildren().addAll(title, new Separator(), scenarioButtons);
+        return panel;
+    }
+    
+    private VBox createMetricsPanel() {
+        VBox panel = new VBox(15);
+        panel.setPrefWidth(320);
+        panel.setPadding(new Insets(15));
+        panel.setStyle("-fx-background-color: #1c1c1e;");
+        
+        ScrollPane scrollPane = new ScrollPane();
+        scrollPane.setFitToWidth(true);
+        scrollPane.setStyle("-fx-background: #1c1c1e;");
+        
+        VBox content = new VBox(15);
+        
+        // Panel Métriques
+        metricsPanel = createMetricsCard();
+        
+        // Panel Agents
+        agentListPanel = createAgentListCard();
+        
+        // Panel Salles
+        roomsPanel = createRoomsCard();
+        
+        // Panel Events
+        eventsPanel = createEventsCard();
+        
+        content.getChildren().addAll(metricsPanel, agentListPanel, roomsPanel, eventsPanel);
+        scrollPane.setContent(content);
+        
+        panel.getChildren().add(scrollPane);
+        return panel;
+    }
+    
+    private VBox createMetricsCard() {
+        VBox card = createCard("SYSTEM METRICS", PRIMARY);
+        
+        GridPane grid = new GridPane();
+        grid.setHgap(15);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(10));
+        
+        addMetric(grid, 0, "Agents", "0", SUCCESS);
+        addMetric(grid, 1, "Groups", "0", WARNING);
+        addMetric(grid, 2, "Cohesion", "0%", PRIMARY);
+        addMetric(grid, 3, "Messages/s", "0", PURPLE);
+        addMetric(grid, 4, "Efficiency", "0%", CYAN);
+        addMetric(grid, 5, "Satisfaction", "0%", SUCCESS);
+        
+        card.getChildren().add(grid);
+        return card;
+    }
+    
+    private VBox createAgentListCard() {
+        VBox card = createCard("ACTIVE AGENTS", SUCCESS);
+        
+        ListView<HBox> agentList = new ListView<>();
+        agentList.setPrefHeight(200);
+        agentList.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-control-inner-background: #2c2c2e;"
+        );
+        agentList.setId("agent_list");
+        
+        card.getChildren().add(agentList);
+        return card;
+    }
+    
+    private VBox createRoomsCard() {
+        VBox card = createCard("ROOMS STATUS", WARNING);
+        
+        VBox roomsList = new VBox(5);
+        roomsList.setPadding(new Insets(10));
+        roomsList.setId("rooms_list");
+        
+        card.getChildren().add(roomsList);
+        return card;
+    }
+    
+    private VBox createEventsCard() {
+        VBox card = createCard("LIVE EVENTS", DANGER);
+        
+        VBox eventsList = new VBox(3);
+        eventsList.setPadding(new Insets(10));
+        eventsList.setId("events_list");
+        eventsList.setPrefHeight(150);
+        
+        card.getChildren().add(eventsList);
+        return card;
+    }
+    
+    private VBox createCard(String title, Color accentColor) {
+        VBox card = new VBox();
+        card.setStyle(
+            "-fx-background-color: #2c2c2e;" +
+            "-fx-background-radius: 12;" +
+            "-fx-border-color: " + toHex(accentColor.deriveColor(0, 1, 0.5, 0.3)) + ";" +
+            "-fx-border-width: 1;" +
+            "-fx-border-radius: 12;"
+        );
+        
+        HBox header = new HBox(10);
+        header.setPadding(new Insets(10, 15, 10, 15));
+        header.setAlignment(Pos.CENTER_LEFT);
+        
+        Circle dot = new Circle(4, accentColor);
+        Label titleLabel = new Label(title);
+        titleLabel.setFont(Font.font("SF Pro Text", FontWeight.BOLD, 12));
+        titleLabel.setTextFill(TEXT_PRIMARY);
+        
+        header.getChildren().addAll(dot, titleLabel);
+        card.getChildren().add(header);
+        
+        return card;
+    }
+    
+    private Button createIOSButton(String text, Color color, Runnable action) {
+        Button btn = new Button(text);
+        btn.setFont(Font.font("SF Pro Text", FontWeight.BOLD, 12));
+        btn.setTextFill(TEXT_PRIMARY);
+        btn.setStyle(
+            "-fx-background-color: " + toHex(color) + ";" +
+            "-fx-background-radius: 8;" +
+            "-fx-padding: 8 16;" +
+            "-fx-cursor: hand;"
+        );
+        
+        btn.setOnMouseEntered(e -> 
+            btn.setStyle(btn.getStyle() + "-fx-background-color: " + 
+                        toHex(color.brighter()) + ";"));
+        btn.setOnMouseExited(e -> 
+            btn.setStyle(btn.getStyle().replace(toHex(color.brighter()), toHex(color))));
+        
+        btn.setOnAction(e -> action.run());
+        return btn;
+    }
+    
+    private Button createScenarioButton(String text, String emoji, Color color, Runnable action) {
+        Button btn = new Button(emoji + "  " + text);
+        btn.setFont(Font.font("SF Pro Text", FontWeight.MEDIUM, 11));
+        btn.setTextFill(TEXT_PRIMARY);
+        btn.setPrefWidth(180);
+        btn.setAlignment(Pos.CENTER_LEFT);
+        btn.setStyle(
+            "-fx-background-color: " + toHex(color.deriveColor(0, 1, 0.3, 0.3)) + ";" +
+            "-fx-background-radius: 8;" +
+            "-fx-padding: 10 15;" +
+            "-fx-border-color: " + toHex(color.deriveColor(0, 1, 0.5, 0.5)) + ";" +
+            "-fx-border-width: 1;" +
+            "-fx-border-radius: 8;" +
+            "-fx-cursor: hand;"
+        );
+        
+        btn.setOnAction(e -> {
+            flashButton(btn, color);
+            action.run();
+        });
+        
+        return btn;
+    }
+    
+    private void flashButton(Button btn, Color color) {
+        Timeline flash = new Timeline(
+            new KeyFrame(Duration.ZERO, 
+                new KeyValue(btn.styleProperty(), btn.getStyle())),
+            new KeyFrame(Duration.millis(100), 
+                new KeyValue(btn.styleProperty(), 
+                    btn.getStyle().replace(
+                        toHex(color.deriveColor(0, 1, 0.3, 0.3)),
+                        toHex(color)))),
+            new KeyFrame(Duration.millis(200), 
+                new KeyValue(btn.styleProperty(), btn.getStyle()))
+        );
+        flash.play();
+    }
+    
+    private void initializeGameWorld() {
+        // Créer les salles
+        rooms.clear();
+        rooms.add(new Room("Entrance", 150, 150, 100, 80, PRIMARY.deriveColor(0, 0.5, 1, 0.3)));
+        rooms.add(new Room("Renaissance", 350, 100, 100, 80, SUCCESS.deriveColor(0, 0.5, 1, 0.3)));
+        rooms.add(new Room("Modern", 550, 100, 100, 80, WARNING.deriveColor(0, 0.5, 1, 0.3)));
+        rooms.add(new Room("Impressionism", 350, 250, 100, 80, PURPLE.deriveColor(0, 0.5, 1, 0.3)));
+        rooms.add(new Room("Sculpture", 550, 250, 100, 80, CYAN.deriveColor(0, 0.5, 1, 0.3)));
+        rooms.add(new Room("Rest Area", 450, 380, 100, 80, Color.GRAY.deriveColor(0, 0.5, 1, 0.3)));
+        rooms.add(new Room("Exit", 750, 200, 80, 80, DANGER.deriveColor(0, 0.5, 1, 0.3)));
+    }
+    
+    private void startGameLoop() {
+        gameLoop = new AnimationTimer() {
+            long lastUpdate = System.nanoTime();
+            
+            @Override
+            public void handle(long now) {
+                double elapsedTime = (now - lastUpdate) / 1_000_000_000.0;
+                
+                if (elapsedTime >= deltaTime) {
+                    time += deltaTime;
+                    update();
+                    render();
+                    lastUpdate = now;
+                }
+            }
+        };
+        gameLoop.start();
+    }
+    
+    private void update() {
+        if (!systemRunning) return;
+        
+        // Update agents avec mouvement fluide style Football Manager
+        for (GameAgent agent : agents.values()) {
+            agent.update(deltaTime);
+        }
+        
+        // Update des groupes étoilés
+        for (StarGroup group : starGroups) {
+            group.update(deltaTime);
+        }
+        
+        // Update des liens réseau
+        networkLinks.removeIf(link -> link.isDead());
+        for (NetworkLink link : networkLinks) {
+            link.update(deltaTime);
+        }
+        
+        // Traiter les événements
+        processEvents();
+        
+        // Update métriques
+        if ((int)(time * 2) % 2 == 0) {
+            updateMetrics();
+        }
+    }
+    
+    private void render() {
+        // Clear avec gradient gaming
+        LinearGradient bg = new LinearGradient(
+            0, 0, 0, 1, true, CycleMethod.NO_CYCLE,
+            new Stop(0, Color.rgb(28, 28, 30)),
+            new Stop(1, Color.rgb(22, 22, 24))
+        );
+        gc.setFill(bg);
+        gc.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        
+        // Grille animée style Tetris/gaming
+        renderAnimatedGrid();
+        
+        // Rendu des salles style néon
+        for (Room room : rooms) {
+            renderNeonRoom(room);
+        }
+        
+        // Rendu des liens réseau
+        for (NetworkLink link : networkLinks) {
+            renderNetworkLink(link);
+        }
+        
+        // Rendu des groupes étoilés (nuage de points)
+        for (StarGroup group : starGroups) {
+            renderStarGroup(group);
+        }
+        
+        // Rendu des agents style Football Manager
+        for (GameAgent agent : agents.values()) {
+            if (!agent.inGroup) {
+                renderGameAgent(agent);
+            }
+        }
+        
+        // HUD gaming
+        renderGamingHUD();
+    }
+    
+    private void renderAnimatedGrid() {
+        double gridSize = 40;
+        double animOffset = (time * 20) % gridSize;
+        
+        gc.setStroke(Color.rgb(255, 255, 255, 0.02));
+        gc.setLineWidth(1);
+        
+        // Grille verticale animée
+        for (double x = -animOffset; x < CANVAS_WIDTH; x += gridSize) {
+            gc.strokeLine(x, 0, x, CANVAS_HEIGHT);
+        }
+        
+        // Grille horizontale animée
+        for (double y = -animOffset; y < CANVAS_HEIGHT; y += gridSize) {
+            gc.strokeLine(0, y, CANVAS_WIDTH, y);
+        }
+        
+        // Points lumineux aux intersections
+        gc.setFill(PRIMARY.deriveColor(0, 1, 1, 0.1));
+        for (double x = gridSize - animOffset; x < CANVAS_WIDTH; x += gridSize) {
+            for (double y = gridSize - animOffset; y < CANVAS_HEIGHT; y += gridSize) {
+                double pulse = Math.sin(time * 2 + x * 0.01 + y * 0.01) * 0.5 + 0.5;
+                gc.setGlobalAlpha(pulse * 0.3);
+                gc.fillOval(x - 2, y - 2, 4, 4);
+            }
+        }
+        gc.setGlobalAlpha(1);
+    }
+    
+    private void renderNeonRoom(Room room) {
+        // Effet néon gaming
+        if (room.occupied) {
+            // Glow effect
+            gc.setFill(room.color.brighter());
+            gc.setGlobalAlpha(0.3);
+            for (int i = 3; i > 0; i--) {
+                gc.fillRoundRect(
+                    room.x - i * 2, 
+                    room.y - i * 2, 
+                    room.width + i * 4, 
+                    room.height + i * 4, 
+                    15, 15
+                );
+            }
+            gc.setGlobalAlpha(1);
+        }
+        
+        // Corps de la salle
+        gc.setFill(room.occupied ? room.color.brighter() : room.color);
+        gc.fillRoundRect(room.x, room.y, room.width, room.height, 10, 10);
+        
+        // Bordure néon
+        gc.setStroke(room.occupied ? room.color.brighter().brighter() : room.color.brighter());
+        gc.setLineWidth(2);
+        gc.strokeRoundRect(room.x, room.y, room.width, room.height, 10, 10);
+        
+        // Nom en pixel font style
+        gc.setFill(TEXT_PRIMARY);
+        gc.setFont(Font.font("SF Mono", FontWeight.BOLD, 11));
+        double textX = room.x + (room.width - room.name.length() * 6) / 2;
+        gc.fillText(room.name.toUpperCase(), textX, room.y + room.height / 2);
+        
+        // Status indicator
+        if (room.occupied) {
+            gc.setFill(DANGER);
+            gc.fillOval(room.x + room.width - 15, room.y + 5, 8, 8);
+        }
+    }
+    
+    private void renderStarGroup(StarGroup group) {
+        if (group.guide == null) return;
+        
+        // Rendu du nuage de points étoilé
+        GameAgent guide = agents.get(group.guideId);
+        if (guide == null) return;
+        
+        // Centre du guide avec pulsation
+        double pulse = 1 + Math.sin(time * 3) * 0.1;
+        
+        // Aura du groupe
+        RadialGradient groupAura = new RadialGradient(
+            0, 0, 0.5, 0.5, 0.5, true, CycleMethod.NO_CYCLE,
+            new Stop(0, group.color.deriveColor(0, 1, 1, 0.2)),
+            new Stop(0.5, group.color.deriveColor(0, 1, 1, 0.1)),
+            new Stop(1, Color.TRANSPARENT)
+        );
+        
+        gc.setFill(groupAura);
+        double auraSize = group.radius * 2.5 * pulse;
+        gc.fillOval(guide.x - auraSize/2, guide.y - auraSize/2, auraSize, auraSize);
+        
+        // Liens étoilés animés vers les touristes
+        gc.setStroke(group.color.deriveColor(0, 1, 1, 0.4));
+        gc.setLineWidth(1.5);
+        
+        for (GroupMember member : group.members) {
+            // Ligne animée
+            gc.setLineDashes(5, 10);
+            gc.strokeLine(guide.x, guide.y, member.x, member.y);
+            
+            // Particule qui voyage sur la ligne
+            double progress = (time * 0.5 + member.offset) % 1;
+            double particleX = guide.x + (member.x - guide.x) * progress;
+            double particleY = guide.y + (member.y - guide.y) * progress;
+            
+            gc.setFill(group.color.brighter());
+            gc.fillOval(particleX - 3, particleY - 3, 6, 6);
+        }
+        gc.setLineDashes(); // Reset dashes
+        
+        // Rendu du guide au centre
+        renderGameAgent(guide);
+        
+        // Rendu des touristes en formation étoilée
+        for (GroupMember member : group.members) {
+            GameAgent tourist = agents.get(member.agentId);
+            if (tourist != null) {
+                // Position avec oscillation
+                tourist.x = member.x + Math.sin(time * 2 + member.angle) * 3;
+                tourist.y = member.y + Math.cos(time * 2 + member.angle) * 3;
+                renderGameAgent(tourist);
+            }
+        }
+        
+        // Label du groupe
+        gc.setFill(TEXT_PRIMARY);
+        gc.setFont(Font.font("SF Pro Display", FontWeight.BOLD, 12));
+        gc.fillText(group.name, guide.x - 30, guide.y - group.radius - 20);
+        
+        // Indicateur de cohésion
+        double cohesion = group.calculateCohesion();
+        gc.setStroke(SUCCESS);
+        gc.setLineWidth(3);
+        gc.strokeArc(
+            guide.x - 25, guide.y - 25, 50, 50,
+            90, -cohesion * 360,
+            ArcType.OPEN
+        );
+    }
+    
+    private void renderGameAgent(GameAgent agent) {
+        // Style Football Manager - cercle avec couleur selon type
+        double size = agent.getSize();
+        
+        // Ombre
+        gc.setFill(Color.rgb(0, 0, 0, 0.3));
+        gc.fillOval(agent.x - size/2 + 2, agent.y - size/2 + 2, size, size);
+        
+        // Corps principal avec gradient
+        RadialGradient agentGradient = new RadialGradient(
+            0, 0, 0.3, 0.3, 0.6, true, CycleMethod.NO_CYCLE,
+            new Stop(0, agent.color.brighter()),
+            new Stop(0.7, agent.color),
+            new Stop(1, agent.color.darker())
+        );
+        
+        gc.setFill(agentGradient);
+        gc.fillOval(agent.x - size/2, agent.y - size/2, size, size);
+        
+        // Bordure lumineuse
+        gc.setStroke(agent.color.brighter().brighter());
+        gc.setLineWidth(2);
+        gc.strokeOval(agent.x - size/2, agent.y - size/2, size, size);
+        
+        // Icône/Lettre au centre
+        gc.setFill(TEXT_PRIMARY);
+        gc.setFont(Font.font("SF Mono", FontWeight.BOLD, size/2));
+        String icon = agent.type.toString().substring(0, 1);
+        gc.fillText(icon, agent.x - size/4, agent.y + size/4);
+        
+        // Nom au-dessus (petit)
+        gc.setFont(Font.font("SF Pro Text", 9));
+        gc.setFill(TEXT_SECONDARY);
+        gc.fillText(agent.name, agent.x - 20, agent.y - size/2 - 5);
+        
+        // Barre de statut
+        if (agent.showStatus) {
+            renderAgentStatusBar(agent, size);
+        }
+    }
+    
+    private void renderAgentStatusBar(GameAgent agent, double size) {
+        double barWidth = size * 1.5;
+        double barHeight = 3;
+        double barY = agent.y + size/2 + 8;
+        
+        // Satisfaction
+        gc.setFill(Color.rgb(50, 50, 50, 0.7));
+        gc.fillRoundRect(agent.x - barWidth/2, barY, barWidth, barHeight, 2, 2);
+        
+        gc.setFill(SUCCESS);
+        gc.fillRoundRect(agent.x - barWidth/2, barY, barWidth * agent.satisfaction, barHeight, 2, 2);
+    }
+    
+    private void renderNetworkLink(NetworkLink link) {
+        GameAgent from = agents.get(link.fromId);
+        GameAgent to = agents.get(link.toId);
+        
+        if (from == null || to == null) return;
+        
+        // Animation de flux de données
+        double progress = link.progress;
+        double x = from.x + (to.x - from.x) * progress;
+        double y = from.y + (to.y - from.y) * progress;
+        
+        // Traînée
+        gc.setStroke(link.color.deriveColor(0, 1, 1, 0.2));
+        gc.setLineWidth(1);
+        gc.strokeLine(from.x, from.y, x, y);
+        
+        // Paquet de données
+        gc.setFill(link.color);
+        gc.fillOval(x - 4, y - 4, 8, 8);
+    }
+    
+    private void renderGamingHUD() {
+        // Mini-map en haut à droite
+        renderMiniMap();
+        
+        // Compteur FPS
+        gc.setFill(SUCCESS);
+        gc.setFont(Font.font("SF Mono", 10));
+        gc.fillText("60 FPS", CANVAS_WIDTH - 50, 20);
+        
+        // Temps de simulation
+        gc.setFill(TEXT_SECONDARY);
+        gc.fillText(String.format("TIME: %.1fs", time), 10, 20);
+    }
+    
+    private void renderMiniMap() {
+        double mmX = CANVAS_WIDTH - 160;
+        double mmY = 10;
+        double mmWidth = 150;
+        double mmHeight = 100;
+        
+        // Fond semi-transparent
+        gc.setFill(Color.rgb(0, 0, 0, 0.7));
+        gc.fillRoundRect(mmX, mmY, mmWidth, mmHeight, 5, 5);
+        
+        // Bordure
+        gc.setStroke(PRIMARY.deriveColor(0, 1, 1, 0.5));
+        gc.setLineWidth(1);
+        gc.strokeRoundRect(mmX, mmY, mmWidth, mmHeight, 5, 5);
+        
+        // Agents sur la mini-map
+        double scale = 0.15;
+        for (GameAgent agent : agents.values()) {
+            gc.setFill(agent.color);
+            double ax = mmX + agent.x * scale;
+            double ay = mmY + agent.y * scale;
+            gc.fillOval(ax - 2, ay - 2, 4, 4);
+        }
+    }
+    
+    // Méthodes du système
+    
+    private void startSystem() {
+        systemRunning = true;
+        agents.clear();
+        starGroups.clear();
+        networkLinks.clear();
+        
+        // Créer le coordinateur
+        GameAgent coordinator = new GameAgent("COORD-01", AgentType.COORDINATOR);
+        coordinator.setPosition(CANVAS_WIDTH / 2, 50);
+        coordinator.color = PURPLE;
+        agents.put(coordinator.id, coordinator);
+        
+        // Créer 3 guides
+        String[] guideNames = {"GUIDE-A", "GUIDE-B", "GUIDE-C"};
+        Color[] guideColors = {PRIMARY, CYAN, PINK};
+        
+        for (int i = 0; i < 3; i++) {
+            GameAgent guide = new GameAgent(guideNames[i], AgentType.GUIDE);
+            guide.setPosition(300 + i * 200, 500);
+            guide.color = guideColors[i];
+            agents.put(guide.id, guide);
+            
+            // Lien avec coordinateur
+            networkLinks.add(new NetworkLink(coordinator.id, guide.id, PURPLE));
+        }
+        
+        updateMetrics();
+        addEvent("System started", SUCCESS);
+    }
+    
+    private void pauseSystem() {
+        systemRunning = !systemRunning;
+        addEvent(systemRunning ? "System resumed" : "System paused", WARNING);
+    }
+    
+    private void resetSystem() {
+        systemRunning = false;
+        agents.clear();
+        starGroups.clear();
+        networkLinks.clear();
+        
+        for (Room room : rooms) {
+            room.occupied = false;
+        }
+        
+        time = 0;
+        updateMetrics();
+        addEvent("System reset", DANGER);
+    }
+    
+    private void runScenario(String scenario) {
+        switch (scenario) {
+            case "formation":
+                runGroupFormation();
+                break;
+            case "negotiation":
+                runNegotiation();
+                break;
+            case "emergency":
+                runEmergency();
+                break;
+            case "school":
+                runSchoolGroup();
+                break;
+            case "multi":
+                runMultiGroups();
+                break;
+            case "adaptation":
+                runAdaptation();
+                break;
+            case "stress":
+                runStressTest();
+                break;
+        }
+    }
+    
+    private void runGroupFormation() {
+        GameAgent guide = getFirstGuide();
+        if (guide == null) return;
+        
+        // Créer un groupe étoilé
+        StarGroup group = new StarGroup(guide.id, "Alpha Group");
+        group.color = guide.color;
+        
+        // Ajouter 8 touristes en formation étoile
+        for (int i = 0; i < 8; i++) {
+            GameAgent tourist = new GameAgent("TOURIST-" + (agents.size() + 1), AgentType.TOURIST);
+            double angle = (Math.PI * 2 * i) / 8;
+            double radius = 80;
+            
+            tourist.setPosition(
+                guide.x + Math.cos(angle) * radius,
+                guide.y + Math.sin(angle) * radius
+            );
+            tourist.color = SUCCESS;
+            tourist.inGroup = true;
+            agents.put(tourist.id, tourist);
+            
+            // Ajouter au groupe étoilé
+            GroupMember member = new GroupMember(tourist.id, angle, radius);
+            member.x = tourist.x;
+            member.y = tourist.y;
+            group.members.add(member);
+            
+            // Animation de convergence
+            animateAgentMovement(tourist, guide.x + Math.cos(angle) * radius, 
+                                guide.y + Math.sin(angle) * radius);
+        }
+        
+        group.guide = guide;
+        starGroups.add(group);
+        
+        addEvent("Star group formation initiated", PRIMARY);
+    }
+    
+    private void runNegotiation() {
+        GameAgent guide = getFirstGuide();
+        if (guide == null) return;
+        
+        // Créer touristes avec opinions divergentes
+        StarGroup group = new StarGroup(guide.id, "Negotiation Group");
+        group.color = WARNING;
+        
+        for (int i = 0; i < 6; i++) {
+            GameAgent tourist = new GameAgent("NEG-T-" + i, AgentType.TOURIST);
+            double angle = (Math.PI * 2 * i) / 6;
+            double radius = 70;
+            
+            tourist.setPosition(
+                guide.x + Math.cos(angle) * radius,
+                guide.y + Math.sin(angle) * radius
+            );
+            tourist.color = i % 2 == 0 ? WARNING : DANGER;
+            tourist.inGroup = true;
+            agents.put(tourist.id, tourist);
+            
+            GroupMember member = new GroupMember(tourist.id, angle, radius);
+            member.x = tourist.x;
+            member.y = tourist.y;
+            group.members.add(member);
+            
+            // Liens de négociation
+            networkLinks.add(new NetworkLink(tourist.id, guide.id, WARNING));
+        }
+        
+        group.guide = guide;
+        starGroups.add(group);
+        
+        addEvent("Negotiation protocol active", WARNING);
+    }
+    
+    private void runEmergency() {
+        // Créer touriste en détresse
+        GameAgent tourist = new GameAgent("EMERGENCY-01", AgentType.TOURIST);
+        tourist.setPosition(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+        tourist.color = DANGER;
+        tourist.satisfaction = 0.1;
+        tourist.showStatus = true;
+        agents.put(tourist.id, tourist);
+        
+        // Alerter tous les agents
+        for (GameAgent agent : agents.values()) {
+            if (agent.type != AgentType.TOURIST) {
+                networkLinks.add(new NetworkLink(tourist.id, agent.id, DANGER));
+                animateAgentMovement(agent, tourist.x + (Math.random() - 0.5) * 100, 
+                                    tourist.y + (Math.random() - 0.5) * 100);
+            }
+        }
+        
+        addEvent("EMERGENCY PROTOCOL ACTIVATED", DANGER);
+    }
+    
+    private void runSchoolGroup() {
+        GameAgent guide = getFirstGuide();
+        if (guide == null) return;
+        
+        // Créer un grand groupe scolaire
+        StarGroup group = new StarGroup(guide.id, "School Group");
+        group.color = SUCCESS;
+        group.radius = 100;
+        
+        for (int i = 0; i < 15; i++) {
+            GameAgent student = new GameAgent("STUDENT-" + i, AgentType.TOURIST);
+            double angle = (Math.PI * 2 * i) / 15;
+            
+            student.setPosition(
+                guide.x + Math.cos(angle) * group.radius,
+                guide.y + Math.sin(angle) * group.radius
+            );
+            student.color = SUCCESS.brighter();
+            student.inGroup = true;
+            student.satisfaction = 0.8;
+            agents.put(student.id, student);
+            
+            GroupMember member = new GroupMember(student.id, angle, group.radius);
+            member.x = student.x;
+            member.y = student.y;
+            group.members.add(member);
+        }
+        
+        group.guide = guide;
+        starGroups.add(group);
+        
+        addEvent("School group - 15 students", SUCCESS);
+    }
+    
+    private void runMultiGroups() {
+        // Créer 3 groupes simultanés
+        Color[] colors = {PRIMARY, PURPLE, CYAN};
+        String[] names = {"Alpha", "Beta", "Gamma"};
+        
+        int guideIndex = 0;
+        for (GameAgent guide : agents.values()) {
+            if (guide.type == AgentType.GUIDE && guideIndex < 3) {
+                StarGroup group = new StarGroup(guide.id, names[guideIndex] + " Group");
+                group.color = colors[guideIndex];
+                
+                // 5 touristes par groupe
+                for (int i = 0; i < 5; i++) {
+                    GameAgent tourist = new GameAgent("MG-" + guideIndex + "-T" + i, AgentType.TOURIST);
+                    double angle = (Math.PI * 2 * i) / 5;
+                    double radius = 60;
+                    
+                    tourist.setPosition(
+                        guide.x + Math.cos(angle) * radius,
+                        guide.y + Math.sin(angle) * radius
+                    );
+                    tourist.color = colors[guideIndex].brighter();
+                    tourist.inGroup = true;
+                    agents.put(tourist.id, tourist);
+                    
+                    GroupMember member = new GroupMember(tourist.id, angle, radius);
+                    member.x = tourist.x;
+                    member.y = tourist.y;
+                    group.members.add(member);
+                }
+                
+                group.guide = guide;
+                starGroups.add(group);
+                guideIndex++;
+            }
+        }
+        
+        addEvent("Multi-group coordination active", PURPLE);
+    }
+    
+    private void runAdaptation() {
+        GameAgent guide = getFirstGuide();
+        if (guide == null) return;
+        
+        // Groupe qui change de formation
+        StarGroup group = new StarGroup(guide.id, "Adaptive Group");
+        group.color = CYAN;
+        
+        for (int i = 0; i < 7; i++) {
+            GameAgent tourist = new GameAgent("ADAPT-T-" + i, AgentType.TOURIST);
+            double angle = (Math.PI * 2 * i) / 7;
+            double radius = 75;
+            
+            tourist.setPosition(
+                guide.x + Math.cos(angle) * radius,
+                guide.y + Math.sin(angle) * radius
+            );
+            tourist.color = CYAN;
+            tourist.inGroup = true;
+            agents.put(tourist.id, tourist);
+            
+            GroupMember member = new GroupMember(tourist.id, angle, radius);
+            member.x = tourist.x;
+            member.y = tourist.y;
+            group.members.add(member);
+        }
+        
+        group.guide = guide;
+        starGroups.add(group);
+        
+        // Animation de changement de formation
+        Timeline morph = new Timeline();
+        for (int i = 0; i < group.members.size(); i++) {
+            GroupMember member = group.members.get(i);
+            double newRadius = 50 + Math.random() * 50;
+            morph.getKeyFrames().add(
+                new KeyFrame(Duration.seconds(2),
+                    new KeyValue(member.radiusProperty, newRadius))
+            );
+        }
+        morph.play();
+        
+        addEvent("Formation adaptation in progress", CYAN);
+    }
+    
+    private void runStressTest() {
+        // Créer beaucoup d'agents rapidement
+        scheduler.scheduleAtFixedRate(() -> {
+            Platform.runLater(() -> {
+                if (agents.size() < 100) {
+                    GameAgent tourist = new GameAgent("STRESS-" + agents.size(), AgentType.TOURIST);
+                    tourist.setPosition(
+                        Math.random() * CANVAS_WIDTH,
+                        Math.random() * CANVAS_HEIGHT
+                    );
+                    tourist.color = Color.rgb(
+                        (int)(Math.random() * 255),
+                        (int)(Math.random() * 255),
+                        (int)(Math.random() * 255)
+                    );
+                    agents.put(tourist.id, tourist);
+                    
+                    // Mouvement aléatoire
+                    animateAgentMovement(tourist,
+                        Math.random() * CANVAS_WIDTH,
+                        Math.random() * CANVAS_HEIGHT
+                    );
+                }
+            });
+        }, 0, 100, TimeUnit.MILLISECONDS);
+        
+        addEvent("Stress test initiated - 100 agents", PINK);
+    }
+    
+    private void animateAgentMovement(GameAgent agent, double targetX, double targetY) {
+        Timeline move = new Timeline(
+            new KeyFrame(Duration.seconds(1),
+                new KeyValue(agent.xProperty, targetX, Interpolator.EASE_BOTH),
+                new KeyValue(agent.yProperty, targetY, Interpolator.EASE_BOTH))
+        );
+        move.play();
+    }
+    
+    // Méthodes utilitaires
+    
+    private GameAgent getFirstGuide() {
+        for (GameAgent agent : agents.values()) {
+            if (agent.type == AgentType.GUIDE) {
+                return agent;
+            }
+        }
+        return null;
+    }
+    
+    private void addMetric(GridPane grid, int row, String name, String value, Color color) {
+        Label nameLabel = new Label(name);
+        nameLabel.setTextFill(TEXT_SECONDARY);
+        nameLabel.setFont(Font.font("SF Pro Text", 10));
+        
+        Label valueLabel = new Label(value);
+        valueLabel.setTextFill(color);
+        valueLabel.setFont(Font.font("SF Mono", FontWeight.BOLD, 12));
+        valueLabel.setId("metric_" + row);
+        
+        grid.add(nameLabel, 0, row);
+        grid.add(valueLabel, 1, row);
+    }
+    
+    private void updateMetricValue(GridPane grid, int row, String newValue) {
+        Label valueLabel = (Label) grid.lookup("#metric_" + row);
+        if (valueLabel != null) {
+            valueLabel.setText(newValue);
+        }
+    }
+    
+    private void addEvent(String message, Color color) {
+        Platform.runLater(() -> {
+            VBox eventsList = (VBox) root.lookup("#events_list");
+            if (eventsList == null) return;
+            
+            HBox event = new HBox(8);
+            event.setAlignment(Pos.CENTER_LEFT);
+            event.setPadding(new Insets(3, 8, 3, 8));
+            event.setStyle("-fx-background-color: rgba(255,255,255,0.05); -fx-background-radius: 4;");
+            
+            Circle indicator = new Circle(3, color);
+            Label timeLabel = new Label(LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+            timeLabel.setTextFill(TEXT_SECONDARY);
+            timeLabel.setFont(Font.font("SF Mono", 8));
+            
+            Label msgLabel = new Label(message);
+            msgLabel.setTextFill(TEXT_PRIMARY);
+            msgLabel.setFont(Font.font("SF Pro Text", 9));
+            
+            event.getChildren().addAll(indicator, timeLabel, msgLabel);
+            eventsList.getChildren().add(0, event);
+            
+            // Limiter à 20 événements
+            if (eventsList.getChildren().size() > 20) {
+                eventsList.getChildren().remove(20, eventsList.getChildren().size());
+            }
+        });
+    }
+    
+    private void processEvents() {
+        while (!eventQueue.isEmpty()) {
+            GameEvent event = eventQueue.poll();
+            if (event != null) {
+                // Traiter l'événement
+                addEvent(event.message, event.color);
+            }
+        }
+    }
+    
+    private double calculateCohesion() {
+        if (starGroups.isEmpty()) return 0.0;
+        return starGroups.stream()
+                       .mapToDouble(StarGroup::calculateCohesion)
+                       .average()
+                       .orElse(0.0);
+    }
+    
+    private double calculateEfficiency() {
+        if (agents.isEmpty()) return 0.0;
+        return agents.values().stream()
+                     .filter(a -> a.inGroup)
+                     .count() / (double) agents.size();
+    }
+    
+    private double calculateSatisfaction() {
+        if (agents.isEmpty()) return 0.0;
+        return agents.values().stream()
+                     .mapToDouble(a -> a.satisfaction)
+                     .average()
+                     .orElse(0.0);
+    }
+    
+    @SuppressWarnings("unchecked")
+    private void updateAgentList() {
+        ListView<HBox> list = (ListView<HBox>) root.lookup("#agent_list");
+        if (list == null) return;
+        
+        list.getItems().clear();
+        
+        for (GameAgent agent : agents.values()) {
+            HBox item = new HBox(10);
+            item.setAlignment(Pos.CENTER_LEFT);
+            item.setPadding(new Insets(5, 10, 5, 10));
+            
+            Circle indicator = new Circle(4, agent.color);
+            Label name = new Label(agent.name);
+            name.setTextFill(TEXT_PRIMARY);
+            name.setFont(Font.font("SF Pro Text", 10));
+            
+            Label type = new Label(agent.type.toString());
+            type.setTextFill(TEXT_SECONDARY);
+            type.setFont(Font.font("SF Pro Text", 9));
+            
+            Region spacer = new Region();
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            
+            Label status = new Label(agent.inGroup ? "IN GROUP" : "FREE");
+            status.setTextFill(agent.inGroup ? SUCCESS : TEXT_SECONDARY);
+            status.setFont(Font.font("SF Pro Text", 9));
+            
+            item.getChildren().addAll(indicator, name, type, spacer, status);
+            list.getItems().add(item);
+        }
+    }
+    
+    private void updateRoomsList() {
+        VBox roomsList = (VBox) root.lookup("#rooms_list");
+        if (roomsList == null) return;
+        
+        roomsList.getChildren().clear();
+        
+        for (Room room : rooms) {
+            HBox roomItem = new HBox(8);
+            roomItem.setAlignment(Pos.CENTER_LEFT);
+            roomItem.setPadding(new Insets(3, 8, 3, 8));
+            roomItem.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 4;");
+            
+            Circle statusDot = new Circle(3, room.occupied ? DANGER : SUCCESS);
+            Label roomName = new Label(room.name);
+            roomName.setTextFill(TEXT_PRIMARY);
+            roomName.setFont(Font.font("SF Pro Text", 9));
+            
+            Region spacer = new Region();
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            
+            Label status = new Label(room.occupied ? "OCCUPIED" : "FREE");
+            status.setTextFill(room.occupied ? DANGER : SUCCESS);
+            status.setFont(Font.font("SF Mono", 8));
+            
+            roomItem.getChildren().addAll(statusDot, roomName, spacer, status);
+            roomsList.getChildren().add(roomItem);
+        }
+    }
+    
+    private void updateAgentDetails(GameAgent agent) {
+        // Mise à jour des détails de l'agent sélectionné
+        // Peut être implémentée plus tard pour un panneau de détails
+    }
+    
+    private void handleCanvasClick(double x, double y) {
+        for (GameAgent agent : agents.values()) {
+            double dx = x - agent.x;
+            double dy = y - agent.y;
+            if (Math.sqrt(dx*dx + dy*dy) < agent.getSize()) {
+                selectedAgent = agent;
+                updateAgentDetails(agent);
+                return;
+            }
+        }
+    }
+    
+    private void handleCanvasHover(double x, double y) {
+        for (GameAgent agent : agents.values()) {
+            double dx = x - agent.x;
+            double dy = y - agent.y;
+            agent.highlighted = Math.sqrt(dx*dx + dy*dy) < agent.getSize();
+        }
+    }
+    
+    private void updateMetrics() {
+        Platform.runLater(() -> {
+            GridPane grid = (GridPane) metricsPanel.getChildren().get(1);
+            
+            updateMetricValue(grid, 0, String.valueOf(agents.size()));
+            updateMetricValue(grid, 1, String.valueOf(starGroups.size()));
+            updateMetricValue(grid, 2, String.format("%.0f%%", calculateCohesion() * 100));
+            updateMetricValue(grid, 3, String.valueOf(networkLinks.size() * 2));
+            updateMetricValue(grid, 4, String.format("%.0f%%", calculateEfficiency() * 100));
+            updateMetricValue(grid, 5, String.format("%.0f%%", calculateSatisfaction() * 100));
+            
+            updateAgentList();
+            updateRoomsList();
+        });
+    }
+    
+    private String getIOSGamingCSS() {
+        return """
+            .button { -fx-cursor: hand; }
+            .list-view .list-cell:filled:selected:focused, .list-view .list-cell:filled:selected {
+                -fx-background-color: rgba(10, 132, 255, 0.3);
+            }
+            .list-view .list-cell:filled:hover {
+                -fx-background-color: rgba(255, 255, 255, 0.05);
+            }
+            .scroll-pane > .viewport {
+                -fx-background-color: transparent;
+            }
+            .scroll-pane {
+                -fx-background-color: transparent;
+            }
+            .scroll-pane .corner {
+                -fx-background-color: transparent;
+            }
+            """;
+    }
+    
+    private void shutdown() {
+        if (gameLoop != null) {
+            gameLoop.stop();
+        }
+        if (scheduler != null && !scheduler.isShutdown()) {
+            scheduler.shutdown();
+        }
+        Platform.exit();
+    }
+    
+    private String toHex(Color color) {
+        return String.format("#%02X%02X%02X",
+            (int)(color.getRed() * 255),
+            (int)(color.getGreen() * 255),
+            (int)(color.getBlue() * 255));
+    }
+    
+    // Classes internes
+    
+    public class GameAgent {
+        String id;
+        String name;
+        AgentType type;
+        
+        DoubleProperty xProperty = new SimpleDoubleProperty();
+        DoubleProperty yProperty = new SimpleDoubleProperty();
+        double x, y;
+        double vx = 0, vy = 0;
+        
+        Color color;
+        double satisfaction = 0.7;
+        boolean inGroup = false;
+        boolean highlighted = false;
+        boolean showStatus = false;
+        
+        public GameAgent(String name, AgentType type) {
+            this.id = name + "_" + System.nanoTime();
+            this.name = name;
+            this.type = type;
+            
+            xProperty.addListener((obs, oldVal, newVal) -> x = newVal.doubleValue());
+            yProperty.addListener((obs, oldVal, newVal) -> y = newVal.doubleValue());
+        }
+        
+        public void setPosition(double x, double y) {
+            this.x = x;
+            this.y = y;
+            xProperty.set(x);
+            yProperty.set(y);
+        }
+        
+        public void update(double dt) {
+            if (!inGroup) {
+                x += vx * dt * 60;
+                y += vy * dt * 60;
+                
+                vx *= 0.95;
+                vy *= 0.95;
+                
+                if (x < 20 || x > CANVAS_WIDTH - 20) vx = -vx;
+                if (y < 20 || y > CANVAS_HEIGHT - 20) vy = -vy;
+                
+                xProperty.set(x);
+                yProperty.set(y);
+            }
+        }
+        
+        public double getSize() {
+            double base = type == AgentType.COORDINATOR ? 24 : 
+                         type == AgentType.GUIDE ? 20 : 16;
+            return highlighted ? base * 1.2 : base;
+        }
+    }
+    
+    public class GroupMember {
+        String agentId;
+        double x, y;
+        double angle;
+        double radius;
+        double offset;
+        DoubleProperty radiusProperty = new SimpleDoubleProperty();
+        
+        public GroupMember(String agentId, double angle, double radius) {
+            this.agentId = agentId;
+            this.angle = angle;
+            this.radius = radius;
+            this.offset = Math.random();
+            radiusProperty.set(radius);
+            radiusProperty.addListener((obs, oldVal, newVal) -> this.radius = newVal.doubleValue());
+        }
+        
+        public void update(double dt) {
+            angle += dt * 0.1;
+        }
+    }
+    
+    public class StarGroup {
+        String guideId;
+        String name;
+        GameAgent guide;
+        List<GroupMember> members = new ArrayList<>();
+        Color color;
+        double radius = 80;
+        
+        public StarGroup(String guideId, String name) {
+            this.guideId = guideId;
+            this.name = name;
+        }
+        
+        public void update(double dt) {
+            if (guide == null) {
+                guide = agents.get(guideId);
+            }
+            
+            for (GroupMember member : members) {
+                member.update(dt);
+                
+                // Mise à jour position étoilée
+                member.x = guide.x + Math.cos(member.angle) * member.radius;
+                member.y = guide.y + Math.sin(member.angle) * member.radius;
+            }
+        }
+        
+        public double calculateCohesion() {
+            if (members.isEmpty() || guide == null) return 0.0;
+            
+            double totalDistance = 0;
+            for (GroupMember member : members) {
+                double dx = member.x - guide.x;
+                double dy = member.y - guide.y;
+                totalDistance += Math.sqrt(dx * dx + dy * dy);
+            }
+            
+            double avgDistance = totalDistance / members.size();
+            return Math.max(0, 1 - (avgDistance / (radius * 2)));
+        }
+    }
+    
+    public class Room {
+        String name;
+        double x, y, width, height;
+        Color color;
+        boolean occupied = false;
+        
+        public Room(String name, double x, double y, double width, double height, Color color) {
+            this.name = name;
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            this.color = color;
+        }
+    }
+    
+    public class NetworkLink {
+        String fromId, toId;
+        Color color;
+        double progress = 0;
+        double speed = 1.5;
+        double lifeTime = 2.0;
+        double currentTime = 0;
+        
+        public NetworkLink(String fromId, String toId, Color color) {
+            this.fromId = fromId;
+            this.toId = toId;
+            this.color = color;
+        }
+        
+        public void update(double dt) {
+            currentTime += dt;
+            progress = (currentTime * speed) % 1.0;
+        }
+        
+        public boolean isDead() {
+            return currentTime > lifeTime;
+        }
+    }
+    
+    public class GameEvent {
+        String message;
+        Color color;
+        long timestamp;
+        
+        public GameEvent(String message, Color color) {
+            this.message = message;
+            this.color = color;
+            this.timestamp = System.currentTimeMillis();
+        }
+    }
+    
+    // Point d'entrée
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
